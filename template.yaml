@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Template for Pinfano with websocket, api and DynamoDB
+
+Globals:
+  Function:
+    Runtime: java17
+    MemorySize: 512
+    Timeout: 10
+    Handler: com.example.Pinfano.handlers.::handleRequest
+    Environment:
+      Variables:
+        USERS_TABLE: PinfanoUsers
+        CONNECTIONS_TABLE: PinfanoConnections
+        DOMAIN_NAME: !Sub "${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com"
+        STAGE: Prod
+
+Resources:
+  PinfanoConnections:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PinfanoConnections
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  PinfanoUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PinfanoUsers
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  LoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoLogin
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoUsers
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoConnections
+      Handler: com.example.Pinfano.handlers.LoginHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        LoginApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /login
+            Method: POST
+      Environment:
+        Variables:
+          USERS_TABLE: PinfanoUsers
+          CONNECTIONS_TABLE: PinfanoConnections

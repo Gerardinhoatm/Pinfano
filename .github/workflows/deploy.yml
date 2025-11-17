@@ -1,0 +1,60 @@
+name: Deploy Pinfano Backend to AWS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Lambda with SAM
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Java & Maven
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build with Maven
+        run: mvn clean install
+
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::568959215339:role/PinfanoGitHubDeployRole
+          role-session-name: GitHubActionsSession
+          aws-region: eu-central-1
+
+      - name: Install AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Build SAM application
+        run: sam build
+
+      - name: Deploy SAM application
+        run: |
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name PinfanoBackend \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --region eu-central-1 \
+            --s3-bucket pinfano-sam-artifacts-568959215339
