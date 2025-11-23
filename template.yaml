@@ -16,6 +16,31 @@ Globals:
         STAGE: Prod
 
 Resources:
+
+  PinfanoRestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: PinfanoRestApi
+      StageName: Prod
+      Cors:
+        AllowMethods: "'OPTIONS,POST'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: PinfanoWebSocketApi
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: Prod
+      AutoDeploy: true
+
   PinfanoConnections:
     Type: AWS::DynamoDB::Table
     Properties:
