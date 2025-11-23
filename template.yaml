@@ -16,7 +16,7 @@ Globals:
         STAGE: Prod
 
 Resources:
-
+  # Crea en el api gateway en aws el api rest
   PinfanoRestApi:
     Type: AWS::Serverless::Api
     Properties:
