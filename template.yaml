@@ -120,7 +120,7 @@ Resources:
           USERS_TABLE: PinfanoUsers
           CONNECTIONS_TABLE: PinfanoConnections
 
-
+  # funcion de UnregisterHandler (Eliminar cuenta)
   UnregisterFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -146,7 +146,7 @@ Resources:
           USERS_TABLE: PinfanoUsers
           CONNECTIONS_TABLE: PinfanoConnections
 
-  # funcion de LogoffHandler
+  # funcion de LogoffHandler (logIn = false)
   LogOffFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -167,6 +167,32 @@ Resources:
             RestApiId: !Ref PinfanoRestApi
             Path: /logoff
             Method: PATCH
+      Environment:
+        Variables:
+          USERS_TABLE: PinfanoUsers
+          CONNECTIONS_TABLE: PinfanoConnections
+
+  # funcion de ProfileHandler para mostrar perfil
+  ProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoProfile
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoUsers
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoConnections
+      Handler: com.example.Pinfano.handlers.ProfileHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        RegisterApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /profile
+            Method: GET
       Environment:
         Variables:
           USERS_TABLE: PinfanoUsers
