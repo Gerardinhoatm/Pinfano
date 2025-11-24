@@ -138,7 +138,7 @@ Resources:
         LogoffApi:
           Type: Api
           Properties:
-            RestApiId: !Ref PinfanoApi
+            RestApiId: !Ref PinfanoRestApi
             Path: /logoff
             Method: PATCH
       Environment:
