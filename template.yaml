@@ -172,7 +172,7 @@ Resources:
           USERS_TABLE: PinfanoUsers
           CONNECTIONS_TABLE: PinfanoConnections
 
-  # funcion de ProfileHandler para mostrar perfil
+  # funcion de ProfileHandler para mostrar el perfil
   ProfileFunction:
     Type: AWS::Serverless::Function
     Properties:
