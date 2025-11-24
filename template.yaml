@@ -120,6 +120,32 @@ Resources:
           USERS_TABLE: PinfanoUsers
           CONNECTIONS_TABLE: PinfanoConnections
 
+
+  UnregisterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoUnregister
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoUsers
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoConnections
+      Handler: com.example.Pinfano.handlers.UnregisterHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        LogoffApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /unregister
+            Method: DELETE
+      Environment:
+        Variables:
+          USERS_TABLE: PinfanoUsers
+          CONNECTIONS_TABLE: PinfanoConnections
+
   # funcion de LogoffHandler
   LogOffFunction:
     Type: AWS::Serverless::Function
