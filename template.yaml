@@ -119,3 +119,34 @@ Resources:
         Variables:
           USERS_TABLE: PinfanoUsers
           CONNECTIONS_TABLE: PinfanoConnections
+
+  # funcion de LogoffHandler
+  LogOffFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoLogOff
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoUsers
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoConnections
+      Handler: com.example.Pinfano.handlers.LogoffHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        LogoffApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoApi
+            Path: /logoff
+            Method: PATCH
+      Environment:
+        Variables:
+          USERS_TABLE: PinfanoUsers
+          CONNECTIONS_TABLE: PinfanoConnections
+
+Outputs:
+  WebSocketEndpoint:
+    Description: "WebSocket API Endpoint"
+    Value: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
