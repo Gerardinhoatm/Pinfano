@@ -27,6 +27,7 @@ Resources:
         AllowHeaders: "'*'"
         AllowOrigin: "'*'"
 
+  # Crea en el api gateway en aws el websocket
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -41,6 +42,7 @@ Resources:
       StageName: Prod
       AutoDeploy: true
 
+  # Tabla de conexiones
   PinfanoConnections:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -53,6 +55,7 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
+  # Tabla de usuarios
   PinfanoUsersTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -65,6 +68,7 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
+  # funcion de loginHandler se loguea el usuario
   LoginFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -84,6 +88,32 @@ Resources:
           Properties:
             RestApiId: !Ref PinfanoRestApi
             Path: /login
+            Method: POST
+      Environment:
+        Variables:
+          USERS_TABLE: PinfanoUsers
+          CONNECTIONS_TABLE: PinfanoConnections
+
+  # funcion de RegisterHandler se registra el usuario
+  RegisterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoRegister
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoUsers
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoConnections
+      Handler: com.example.Pinfano.handlers.RegisterHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        RegisterApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /register
             Method: POST
       Environment:
         Variables:
