@@ -198,6 +198,32 @@ Resources:
           USERS_TABLE: PinfanoUsers
           CONNECTIONS_TABLE: PinfanoConnections
 
+  # funcion de UpdateProfileHandler actualiza el perfil
+  UpdateProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoUpdateProfile
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoUsers
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoConnections
+      Handler: com.example.Pinfano.handlers.UpdateProfileHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        RegisterApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /UpdateProfile
+            Method: PATCH
+      Environment:
+        Variables:
+          USERS_TABLE: PinfanoUsers
+          CONNECTIONS_TABLE: PinfanoConnections
+
 Outputs:
   WebSocketEndpoint:
     Description: "WebSocket API Endpoint"
