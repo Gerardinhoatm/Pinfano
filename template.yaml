@@ -68,6 +68,19 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
+  # Tabla de partidas
+  PinfanoGames:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PinfanoGames
+      AttributeDefinitions:
+        - AttributeName: idGame
+          AttributeType: S
+      KeySchema:
+        - AttributeName: idGame
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
   # funcion de loginHandler se loguea el usuario
   LoginFunction:
     Type: AWS::Serverless::Function
@@ -223,6 +236,33 @@ Resources:
         Variables:
           USERS_TABLE: PinfanoUsers
           CONNECTIONS_TABLE: PinfanoConnections
+
+  # funcion de TableGameHandler crea la tabla del estado inicial de la partida
+  TableGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoTableGameHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoGames
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoConnections
+      Handler: com.example.Pinfano.handlers.TableGameHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        TableGameApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /tableGameHandler
+            Method: POST
+      Environment:
+        Variables:
+          GAMES_TABLE: PinfanoGames
+          CONNECTIONS_TABLE: PinfanoConnections
+
 
 Outputs:
   WebSocketEndpoint:
