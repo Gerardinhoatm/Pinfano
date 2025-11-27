@@ -81,6 +81,19 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
+  # Tabla de las fichas como valor y clave el nombre de la imagen de dicha ficha
+  PairImagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PairImages
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
   # funcion de loginHandler se loguea el usuario
   LoginFunction:
     Type: AWS::Serverless::Function
@@ -270,7 +283,7 @@ Resources:
       FunctionName: PairImageMapFunction
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: PairImagesPinfano
+            TableName: PairImages
       Handler: com.example.Pinfano.handlers.PairImageMapHandler::handleRequest
       Runtime: java17
       MemorySize: 512
