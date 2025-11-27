@@ -270,7 +270,7 @@ Resources:
       FunctionName: PairImageMapFunction
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: PairImages
+            TableName: PairImagesPinfano
       Handler: com.example.Pinfano.handlers.PairImageMapHandler::handleRequest
       Runtime: java17
       MemorySize: 512
