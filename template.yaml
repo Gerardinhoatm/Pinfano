@@ -276,10 +276,10 @@ Resources:
           CONNECTIONS_TABLE: PinfanoConnections
 
   # Cargar mapa fichas (clave = String (2,4) y valor = String ("dosCuatro"))
-  PairImageMapFunction:
+  PieceImageMapFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: PairImageMapFunction
+      FunctionName: PieceImageMapFunction
       Policies:
         - DynamoDBCrudPolicy:
             TableName: PairImages
@@ -292,7 +292,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref PinfanoRestApi
-            Path: /pair-image-map
+            Path: /piece-image-map
             Method: POST
         PairImageMapApiGet:
           Type: Api
