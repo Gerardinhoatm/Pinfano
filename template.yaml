@@ -263,6 +263,35 @@ Resources:
           GAMES_TABLE: PinfanoGames
           CONNECTIONS_TABLE: PinfanoConnections
 
+  # Cargar mapa fichas (clave = String (2,4) y valor = String ("dosCuatro"))
+  PairImageMapFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PairImageMapFunction
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PairImages
+      Handler: com.example.Pinfano.handlers.PairImageMapHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        PairImageMapApiPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /pair-image-map
+            Method: POST
+        PairImageMapApiGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /pair-image-map
+            Method: GET
+      Environment:
+        Variables:
+          DUPLA_IMAGENES_TABLE: PairImages
+
 
 Outputs:
   WebSocketEndpoint:
