@@ -12,6 +12,7 @@ Globals:
       Variables:
         USERS_TABLE: PinfanoUsers
         CONNECTIONS_TABLE: PinfanoConnections
+        DOMAIN_NAME: !Sub "${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com"
         STAGE: Prod
 
 Resources:
