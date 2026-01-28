@@ -73,14 +73,6 @@
             <version>2.21.11</version>
         </dependency>
 
-        <!-- AWS SDK v2 Core -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>core</artifactId>
-            <version>2.21.11</version>
-        </dependency>
-
-
 
     </dependencies>
 
