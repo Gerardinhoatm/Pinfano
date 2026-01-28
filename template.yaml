@@ -80,18 +80,6 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
-  # Tabla de las fichas como valor y clave el nombre de la imagen de dicha ficha
-  PinfanoPairImagesTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: PinfanoPairImages
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      BillingMode: PAY_PER_REQUEST
 
   # funcion de loginHandler se loguea el usuario
   LoginFunction:
@@ -275,34 +263,25 @@ Resources:
           GAMES_TABLE: PinfanoGames
           CONNECTIONS_TABLE: PinfanoConnections
 
-  # Cargar mapa fichas (clave = String (2,4) y valor = String ("dosCuatro"))
-  PieceImageMapFunction:
+  # funcion de LeerFichasCSVFunction lee las fichas del fichero del servidor del bucket
+  ReadTilesCSVFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: PieceImageMapFunction
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: PinfanoPairImages
-      Handler: com.example.Pinfano.handlers.PairImageMapHandler::handleRequest
+      FunctionName: ReadTilesCSV
+      Handler: com.example.Pinfano.handlers.ReadTilesCSVHandler::handleRequest
       Runtime: java17
       MemorySize: 512
       Timeout: 10
+      Policies:
+        - S3ReadPolicy:
+            BucketName: pinfano-data    # <-- tu bucket
       Events:
-        PairImageMapApiPost:
+        LeerFichasApi:
           Type: Api
           Properties:
             RestApiId: !Ref PinfanoRestApi
-            Path: /piece-image-map
-            Method: POST
-        PairImageMapApiGet:
-          Type: Api
-          Properties:
-            RestApiId: !Ref PinfanoRestApi
-            Path: /pair-image-map
+            Path: /fichas
             Method: GET
-      Environment:
-        Variables:
-          DUPLA_IMAGENES_TABLE: PinfanoPairImages
 
 
 Outputs:
