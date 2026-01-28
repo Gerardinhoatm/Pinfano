@@ -37,7 +37,6 @@ public class ReadTilesCSVHandler implements RequestHandler<APIGatewayV2HTTPEvent
 
             String contenido = fileBytes.asString(StandardCharsets.UTF_8);
 
-            // Devolverlo como texto plano
             return APIGatewayV2HTTPResponse.builder()
                     .withStatusCode(200)
                     .withHeaders(Map.of("Content-Type", "text/plain"))
