@@ -14,10 +14,10 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-public class ReadTilesCSVHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
+public class ReadTilesHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
 
     private static final String BUCKET = "pinfano-data";
-    private static final String KEY = "fichas.csv";
+    private static final String KEY = "fichas.json";
 
     private final S3Client s3 = S3Client.builder()
             .region(Region.EU_CENTRAL_1)
@@ -27,7 +27,6 @@ public class ReadTilesCSVHandler implements RequestHandler<APIGatewayV2HTTPEvent
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent event, Context context) {
 
         try {
-            // Leer el fichero de S3
             ResponseBytes<GetObjectResponse> fileBytes = s3.getObjectAsBytes(
                     GetObjectRequest.builder()
                             .bucket(BUCKET)
@@ -39,7 +38,7 @@ public class ReadTilesCSVHandler implements RequestHandler<APIGatewayV2HTTPEvent
 
             return APIGatewayV2HTTPResponse.builder()
                     .withStatusCode(200)
-                    .withHeaders(Map.of("Content-Type", "text/plain"))
+                    .withHeaders(Map.of("Content-Type", "application/json"))
                     .withBody(contenido)
                     .build();
 
@@ -47,10 +46,8 @@ public class ReadTilesCSVHandler implements RequestHandler<APIGatewayV2HTTPEvent
             e.printStackTrace();
             return APIGatewayV2HTTPResponse.builder()
                     .withStatusCode(500)
-                    .withBody("Error leyendo fichas: " + e.getMessage())
+                    .withBody("Error leyendo JSON: " + e.getMessage())
                     .build();
         }
     }
 }
-
-

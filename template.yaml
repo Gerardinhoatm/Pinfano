@@ -268,14 +268,14 @@ Resources:
   ReadTilesCSVFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ReadTilesCSV
-      Handler: com.example.Pinfano.handlers.ReadTilesCSVHandler::handleRequest
+      FunctionName: ReadTiles
+      Handler: com.example.Pinfano.handlers.ReadTilesHandler::handleRequest
       Runtime: java17
       MemorySize: 512
       Timeout: 10
       Policies:
         - S3ReadPolicy:
-            BucketName: pinfano-data    # <-- tu bucket
+            BucketName: pinfano-data
       Events:
         LeerFichasApi:
           Type: Api
@@ -323,6 +323,7 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/$connect
 
+  # funcion DisconnectFunction que se desconecta al websocket
   DisconnectFunction:
     Type: AWS::Serverless::Function
     Properties:
