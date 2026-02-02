@@ -56,7 +56,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         } catch (Exception e) {
             context.getLogger().log("Error creando partida: " + e.getMessage());
-            return createResponse(500, "Error interno al crear partida.");
+            return createResponse(500, "Error al crear partida.");
         }
     }
 
