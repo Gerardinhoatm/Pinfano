@@ -264,6 +264,30 @@ Resources:
           GAMES_TABLE: PinfanoGames
           CONNECTIONS_TABLE: PinfanoConnections
 
+  # función de CreateGameHandler para crear partidas en la base de datos
+  CreateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoCreateGame
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoGames
+      Handler: com.example.Pinfano.handlers.CreateGameHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        CreateGameApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /creategame
+            Method: POST
+      Environment:
+        Variables:
+          GAMES_TABLE: PinfanoGames
+
+
   # funcion de LeerFichasCSVFunction lee las fichas del fichero del servidor del bucket
   ReadTilesCSVFunction:
     Type: AWS::Serverless::Function
