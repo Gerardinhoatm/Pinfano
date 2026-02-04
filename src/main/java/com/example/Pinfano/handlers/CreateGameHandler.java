@@ -36,7 +36,6 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         try {
             JsonNode body = objectMapper.readTree(request.getBody());
-
             String codigoGame = body.get("codigoGame").asText();
             String json = body.get("json").asText();
             String estado = body.get("estado").asText();
