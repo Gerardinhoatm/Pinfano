@@ -308,6 +308,29 @@ Resources:
             Path: /fichas
             Method: GET
 
+  AddGameToUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoAddGameToUser
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoUsers
+      Handler: com.example.Pinfano.handlers.AddGameToUserHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        AddGameApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /addGameToUser
+            Method: POST
+      Environment:
+        Variables:
+          USERS_TABLE: PinfanoUsers
+
+
   # === Lambda Functions and Routes for Websockets ===
   # funcion ConnectFunction que se conecta al websocket
   ConnectFunction:
