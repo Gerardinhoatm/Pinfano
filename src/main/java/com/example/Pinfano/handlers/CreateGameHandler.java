@@ -12,6 +12,8 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
@@ -39,6 +41,24 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             String json = body.get("json").asText();
             String estado = body.get("estado").asText();
             boolean terminado = body.get("terminado").asBoolean();
+            int turno = body.has("turno") ? body.get("turno").asInt() : 0;
+            int puntosA = body.has("puntosA") ? body.get("puntosA").asInt() : 0;
+            int puntosB = body.has("puntosB") ? body.get("puntosB").asInt() : 0;
+            int mano = body.has("mano") ? body.get("mano").asInt() : 0;
+            int puntos = body.has("puntos") ? body.get("puntos").asInt() : 0;
+
+            JsonNode listaPlayersNode = body.get("listaPlayers");
+            List<String> listaPlayers = new ArrayList<>();
+
+            if (listaPlayersNode != null && listaPlayersNode.isArray()) {
+                for (JsonNode jugador : listaPlayersNode) {
+                    if (jugador.isNull()) {
+                        listaPlayers.add(null); // verdadero null en Java
+                    } else {
+                        listaPlayers.add(jugador.asText());
+                    }
+                }
+            }
 
 
             Table table = dynamoDB.getTable(gamesTable);
@@ -47,7 +67,13 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withPrimaryKey("idGame", codigoGame)
                     .withString("json", json)
                     .withString("estado", estado)
-                    .withBoolean("terminado", terminado);
+                    .withBoolean("terminado", terminado)
+                    .withInt("turno", turno)
+                    .withInt("puntosA", puntosA)
+                    .withInt("puntosB", puntosB)
+                    .withInt("mano", mano)
+                    .withInt("puntos", puntos)
+                    .withList("listaPlayers", listaPlayers);
 
             table.putItem(item);
 
@@ -70,4 +96,3 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 .withBody("{\"message\":\"" + body + "\"}");
     }
 }
-
