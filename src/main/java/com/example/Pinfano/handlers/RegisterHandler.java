@@ -45,6 +45,8 @@ public class RegisterHandler implements RequestHandler<APIGatewayProxyRequestEve
             int age = body.has("age") ? body.get("age").asInt() : 0;
             int rango = body.has("rango") ? body.get("rango").asInt() : 0;
             Boolean logIn = body.has("logIn") ? body.get("logIn").asBoolean(): false;
+            JsonNode numbersNode = body.has("numbers") ? body.get("numbers") : objectMapper.createArrayNode();
+
 
             Table table = dynamoDB.getTable(userTable);
 
@@ -71,7 +73,8 @@ public class RegisterHandler implements RequestHandler<APIGatewayProxyRequestEve
                     .withString("email", email)
                     .withInt("age", age)
                     .withInt("rango", rango)
-                    .withBoolean("logIn", logIn));
+                    .withBoolean("logIn", logIn)
+                    .withList("numbers", objectMapper.convertValue(numbersNode, java.util.List.class)));
 
             return createResponse(200, "Usuario registrado correctamente.");
 
