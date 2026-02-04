@@ -37,6 +37,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         try {
             JsonNode body = objectMapper.readTree(request.getBody());
+            String idGame = body.get("idGame").asText();
             String codigoGame = body.get("codigoGame").asText();
             String json = body.get("json").asText();
             String estado = body.get("estado").asText();
@@ -59,12 +60,64 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     }
                 }
             }
+            JsonNode listaFichasNode = body.get("listaFichas");
+            List<List<List<Integer>>> listaFichas = new ArrayList<>();
+            if (listaFichasNode != null && listaFichasNode.isArray()) {
+                for (JsonNode jugadorNode : listaFichasNode) {
+                    List<List<Integer>> fichasJugador = new ArrayList<>();
+
+                    for (JsonNode ficha : jugadorNode) {
+                        List<Integer> duo = new ArrayList<>();
+                        duo.add(ficha.get(0).asInt());
+                        duo.add(ficha.get(1).asInt());
+                        fichasJugador.add(duo);
+                    }
+                    listaFichas.add(fichasJugador);
+                }
+            }
+            JsonNode pinfanoNode = body.get("pinfano");
+            List<Integer> pinfano = new ArrayList<>();
+            if (pinfanoNode != null && pinfanoNode.isArray()) {
+                pinfano.add(pinfanoNode.get(0).asInt());
+                pinfano.add(pinfanoNode.get(1).asInt());
+            }
+            JsonNode tableroNode = body.get("tablero");
+            List<List<Integer>> tablero = new ArrayList<>();
+
+            if (tableroNode != null && tableroNode.isArray()) {
+                for (JsonNode ficha : tableroNode) {
+                    List<Integer> duo = new ArrayList<>();
+                    duo.add(ficha.get(0).asInt());
+                    duo.add(ficha.get(1).asInt());
+                    tablero.add(duo);
+                }
+            }
+            JsonNode fichasSalidasNode = body.get("fichasSalidas");
+            List<List<Integer>> fichasSalidas = new ArrayList<>();
+            if (fichasSalidasNode != null && fichasSalidasNode.isArray()) {
+                for (JsonNode ficha : fichasSalidasNode) {
+                    List<Integer> duo = new ArrayList<>();
+                    duo.add(ficha.get(0).asInt());
+                    duo.add(ficha.get(1).asInt());
+                    fichasSalidas.add(duo);
+                }
+            }
+            JsonNode pasoNode = body.get("paso");
+            List<String> paso = new ArrayList<>();
+            if (pasoNode != null && pasoNode.isArray()) {
+                for (JsonNode p : pasoNode) {
+                    if (p.isNull()) paso.add(null);
+                    else paso.add(p.asText());
+                }
+            }
+
 
 
             Table table = dynamoDB.getTable(gamesTable);
 
             Item item = new Item()
-                    .withPrimaryKey("idGame", codigoGame)
+                    .withPrimaryKey("idGame", idGame)
+                    .withString("codigoGame", codigoGame)
                     .withString("json", json)
                     .withString("estado", estado)
                     .withBoolean("terminado", terminado)
@@ -73,7 +126,13 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withInt("puntosB", puntosB)
                     .withInt("mano", mano)
                     .withInt("puntos", puntos)
-                    .withList("listaPlayers", listaPlayers);
+                    .withList("listaPlayers", listaPlayers)
+                    .withList("listaFichas", listaFichas)
+                    .withList("fichasSalidas", fichasSalidas)
+                    .withList("tablero", tablero)
+                    .withList("pinfano", pinfano)
+                    .withList("paso", paso);
+
 
             table.putItem(item);
 
