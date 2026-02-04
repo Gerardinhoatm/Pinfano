@@ -25,18 +25,13 @@ public class ConnectHandler implements RequestHandler<APIGatewayV2WebSocketEvent
 
         // Valores enviados desde Android Studio
         String username = headers.getOrDefault("X-Username", "unknown");
-
-        context.getLogger().log("🔌 Nueva conexión WebSocket");
-        context.getLogger().log("➡ connectionId: " + connectionId);
-        context.getLogger().log("➡ username: " + username);
+        String codigoPartida = headers.get("X-Codigo");
 
         // Guardar en DynamoDB
         Map<String, AttributeValue> item = new HashMap<>();
         item.put("connectionId", new AttributeValue(connectionId));
         item.put("username", new AttributeValue(username));
-
-        // Siempre null cuando se conecta
-        item.put("codigoPartida", new AttributeValue().withNULL(true));
+        item.put("codigoPartida", new AttributeValue(codigoPartida));
 
         // Estado de usuario
         item.put("connected", new AttributeValue().withBOOL(true));

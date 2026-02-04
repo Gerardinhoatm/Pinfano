@@ -23,7 +23,6 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
-
         if ("OPTIONS".equalsIgnoreCase(request.getHttpMethod())) {
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(200)
@@ -41,10 +40,11 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             String estado = body.get("estado").asText();
             boolean terminado = body.get("terminado").asBoolean();
 
+
             Table table = dynamoDB.getTable(gamesTable);
 
             Item item = new Item()
-                    .withPrimaryKey("codigoGame", codigoGame)
+                    .withPrimaryKey("idGame", codigoGame)
                     .withString("json", json)
                     .withString("estado", estado)
                     .withBoolean("terminado", terminado);
