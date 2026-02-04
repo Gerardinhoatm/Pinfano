@@ -128,8 +128,8 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withInt("puntos", puntos)
                     .withList("listaPlayers", listaPlayers)
                     .withList("listaFichas", listaFichas)
-                    .withList("fichasSalidas", fichasSalidas)
                     .withList("tablero", tablero)
+                    .withList("fichasSalidas", fichasSalidas)
                     .withList("pinfano", pinfano)
                     .withList("paso", paso);
 
