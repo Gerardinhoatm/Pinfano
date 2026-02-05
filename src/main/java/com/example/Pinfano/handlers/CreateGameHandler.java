@@ -60,6 +60,22 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     }
                 }
             }
+
+            JsonNode pinfanoNode = body.get("pinfano");
+            List<Integer> pinfano = new ArrayList<>();
+            if (pinfanoNode != null && pinfanoNode.isArray()) {
+                pinfano.add(pinfanoNode.get(0).asInt());
+                pinfano.add(pinfanoNode.get(1).asInt());
+            }
+
+            JsonNode pasoNode = body.get("paso");
+            List<String> paso = new ArrayList<>();
+            if (pasoNode != null && pasoNode.isArray()) {
+                for (JsonNode p : pasoNode) {
+                    if (p.isNull()) paso.add(null);
+                    else paso.add(p.asText());
+                }
+            }
             /*
             JsonNode listaFichasNode = body.get("listaFichas");
             List<List<List<Integer>>> listaFichas = new ArrayList<>();
@@ -77,12 +93,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 }
             }
             */
-            JsonNode pinfanoNode = body.get("pinfano");
-            List<Integer> pinfano = new ArrayList<>();
-            if (pinfanoNode != null && pinfanoNode.isArray()) {
-                pinfano.add(pinfanoNode.get(0).asInt());
-                pinfano.add(pinfanoNode.get(1).asInt());
-            }
+
             /*
             JsonNode tableroNode = body.get("tablero");
             List<List<Integer>> tablero = new ArrayList<>();
@@ -105,14 +116,6 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     fichasSalidas.add(duo);
                 }
             }
-            JsonNode pasoNode = body.get("paso");
-            List<String> paso = new ArrayList<>();
-            if (pasoNode != null && pasoNode.isArray()) {
-                for (JsonNode p : pasoNode) {
-                    if (p.isNull()) paso.add(null);
-                    else paso.add(p.asText());
-                }
-            }
 
             */
 
@@ -130,11 +133,11 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withInt("mano", mano)
                     .withInt("puntos", puntos)
                     .withList("listaPlayers", listaPlayers)
+                    .withList("pinfano", pinfano)
                     //.withList("listaFichas", listaFichas)
                     //.withList("tablero", tablero)
                     //.withList("fichasSalidas", fichasSalidas)
-                    .withList("pinfano", pinfano);
-                    //.withList("paso", paso);
+                    .withList("paso", paso);
 
 
             table.putItem(item);
