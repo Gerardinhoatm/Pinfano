@@ -93,7 +93,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     duo.add(ficha.get(1).asInt());
                     tablero.add(duo);
                 }
-            }
+            }*/
             JsonNode fichasSalidasNode = body.get("fichasSalidas");
             List<List<Integer>> fichasSalidas = new ArrayList<>();
             if (fichasSalidasNode != null && fichasSalidasNode.isArray()) {
@@ -103,7 +103,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     duo.add(ficha.get(1).asInt());
                     fichasSalidas.add(duo);
                 }
-            }
+            }/*
             JsonNode pasoNode = body.get("paso");
             List<String> paso = new ArrayList<>();
             if (pasoNode != null && pasoNode.isArray()) {
@@ -128,13 +128,12 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withInt("puntosB", puntosB)
                     .withInt("mano", mano)
                     .withInt("puntos", puntos)
-                    .withList("listaPlayers", listaPlayers);
-            /*
-                    .withList("listaFichas", listaFichas)
-                    .withList("tablero", tablero)
-                    .withList("fichasSalidas", fichasSalidas)
-                    .withList("pinfano", pinfano)
-                    .withList("paso", paso);*/
+                    .withList("listaPlayers", listaPlayers)
+                    //.withList("listaFichas", listaFichas)
+                    //.withList("tablero", tablero)
+                    .withList("fichasSalidas", fichasSalidas);
+                    //.withList("pinfano", pinfano)
+                    //.withList("paso", paso);
 
 
             table.putItem(item);
