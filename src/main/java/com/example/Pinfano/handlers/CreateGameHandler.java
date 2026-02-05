@@ -54,7 +54,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             if (listaPlayersNode != null && listaPlayersNode.isArray()) {
                 for (JsonNode jugador : listaPlayersNode) {
                     if (jugador.isNull()) {
-                        listaPlayers.add(null); // verdadero null en Java
+                        listaPlayers.add(null);
                     } else {
                         listaPlayers.add(jugador.asText());
                     }
@@ -76,6 +76,19 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     else paso.add(p.asText());
                 }
             }
+
+            JsonNode tableroNode = body.get("tablero");
+            List<List<Integer>> tablero = new ArrayList<>();
+
+            if (tableroNode != null && tableroNode.isArray()) {
+                for (JsonNode ficha : tableroNode) {
+                    List<Integer> duo = new ArrayList<>();
+                    duo.add(ficha.get(0).asInt());
+                    duo.add(ficha.get(1).asInt());
+                    tablero.add(duo);
+                }
+            }
+
             /*
             JsonNode listaFichasNode = body.get("listaFichas");
             List<List<List<Integer>>> listaFichas = new ArrayList<>();
@@ -95,17 +108,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             */
 
             /*
-            JsonNode tableroNode = body.get("tablero");
-            List<List<Integer>> tablero = new ArrayList<>();
 
-            if (tableroNode != null && tableroNode.isArray()) {
-                for (JsonNode ficha : tableroNode) {
-                    List<Integer> duo = new ArrayList<>();
-                    duo.add(ficha.get(0).asInt());
-                    duo.add(ficha.get(1).asInt());
-                    tablero.add(duo);
-                }
-            }
             JsonNode fichasSalidasNode = body.get("fichasSalidas");
             List<List<Integer>> fichasSalidas = new ArrayList<>();
             if (fichasSalidasNode != null && fichasSalidasNode.isArray()) {
@@ -135,7 +138,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withList("listaPlayers", listaPlayers)
                     .withList("pinfano", pinfano)
                     //.withList("listaFichas", listaFichas)
-                    //.withList("tablero", tablero)
+                    .withList("tablero", tablero)
                     //.withList("fichasSalidas", fichasSalidas)
                     .withList("paso", paso);
 
