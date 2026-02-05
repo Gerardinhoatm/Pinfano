@@ -76,13 +76,14 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     listaFichas.add(fichasJugador);
                 }
             }
-
+            */
             JsonNode pinfanoNode = body.get("pinfano");
             List<Integer> pinfano = new ArrayList<>();
             if (pinfanoNode != null && pinfanoNode.isArray()) {
                 pinfano.add(pinfanoNode.get(0).asInt());
                 pinfano.add(pinfanoNode.get(1).asInt());
             }
+            /*
             JsonNode tableroNode = body.get("tablero");
             List<List<Integer>> tablero = new ArrayList<>();
 
@@ -93,7 +94,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     duo.add(ficha.get(1).asInt());
                     tablero.add(duo);
                 }
-            }*/
+            }
             JsonNode fichasSalidasNode = body.get("fichasSalidas");
             List<List<Integer>> fichasSalidas = new ArrayList<>();
             if (fichasSalidasNode != null && fichasSalidasNode.isArray()) {
@@ -103,7 +104,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     duo.add(ficha.get(1).asInt());
                     fichasSalidas.add(duo);
                 }
-            }/*
+            }
             JsonNode pasoNode = body.get("paso");
             List<String> paso = new ArrayList<>();
             if (pasoNode != null && pasoNode.isArray()) {
@@ -131,8 +132,8 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withList("listaPlayers", listaPlayers)
                     //.withList("listaFichas", listaFichas)
                     //.withList("tablero", tablero)
-                    .withList("fichasSalidas", fichasSalidas);
-                    //.withList("pinfano", pinfano)
+                    //.withList("fichasSalidas", fichasSalidas)
+                    .withList("pinfano", pinfano);
                     //.withList("paso", paso);
 
 
