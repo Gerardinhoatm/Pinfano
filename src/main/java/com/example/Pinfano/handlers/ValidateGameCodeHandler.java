@@ -31,7 +31,8 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
         try {
 
             JsonNode body = objectMapper.readTree(request.getBody());
-            String codigo = body.get("codigo").asText();
+            String codigo = body.get("codigoGame").asText();
+            String username = body.get("username").asText();
 
             Table table = dynamoDB.getTable(gamesTable);
 
@@ -56,7 +57,16 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
                 return createResponse(400, "{\"valid\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
 
-            // Comprobar hueco
+            // Nueva validación: comprobar si el usuario ya está en la partida
+            boolean yaExiste = players.stream()
+                    .filter(p -> p != null)
+                    .anyMatch(p -> p.toString().equalsIgnoreCase(username));
+
+            if (yaExiste) {
+                return createResponse(400, "{\"valid\":false, \"reason\":\"YA_EXISTE_USUARIO\"}");
+            }
+
+            // Comprobar hueco libre
             boolean hayHueco = players.stream().anyMatch(p -> p == null);
 
             if (!hayHueco) {
@@ -86,4 +96,3 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
                 .withBody(body);
     }
 }
-
