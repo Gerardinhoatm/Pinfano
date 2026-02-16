@@ -354,6 +354,50 @@ Resources:
         Variables:
           USERS_TABLE: PinfanoUsers
 
+  ValidateGameCodeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoValidateGameCode
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoGames
+      Handler: com.example.Pinfano.handlers.ValidateGameCodeHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        ValidateGameCodeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /validateGame
+            Method: POST
+      Environment:
+        Variables:
+          GAMES_TABLE: PinfanoGames
+
+  JoinGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoJoinGame
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoGames
+      Handler: com.example.Pinfano.handlers.JoinGameHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        JoinGameApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /joinGame
+            Method: POST
+      Environment:
+        Variables:
+          GAMES_TABLE: PinfanoGames
+
   # === Lambda Functions and Routes for Websockets ===
   # funcion ConnectFunction que se conecta al websocket
   ConnectFunction:
