@@ -105,9 +105,9 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 }
             }
 
-            /*
             JsonNode fichasSalidasNode = body.get("fichasSalidas");
             List<List<Integer>> fichasSalidas = new ArrayList<>();
+
             if (fichasSalidasNode != null && fichasSalidasNode.isArray()) {
                 for (JsonNode ficha : fichasSalidasNode) {
                     List<Integer> duo = new ArrayList<>();
@@ -116,7 +116,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     fichasSalidas.add(duo);
                 }
             }
-            */
+
 
             Table table = dynamoDB.getTable(gamesTable);
 
@@ -135,7 +135,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withList("pinfano", pinfano)
                     .withList("listaFichas", listaFichas)
                     .withList("tablero", tablero)
-                    //.withList("fichasSalidas", fichasSalidas)
+                    .withList("fichasSalidas", fichasSalidas)
                     .withList("paso", paso);
 
 
