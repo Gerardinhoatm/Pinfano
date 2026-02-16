@@ -31,12 +31,11 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
         try {
 
             JsonNode body = objectMapper.readTree(request.getBody());
-            String codigo = body.get("codigo").asText();
+            String codigo = body.get("codigoGame").asText();
             String username = body.get("username").asText();
 
             Table table = dynamoDB.getTable(gamesTable);
 
-            // Buscar partida por codigoGame
             ScanSpec scan = new ScanSpec()
                     .withFilterExpression("codigoGame = :codigoVal")
                     .withValueMap(Map.of(":codigoVal", codigo));
