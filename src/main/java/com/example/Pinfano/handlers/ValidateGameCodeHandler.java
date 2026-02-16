@@ -57,17 +57,27 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
                 return createResponse(400, "{\"valid\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
 
-            // Nueva validación: comprobar si el usuario ya está en la partida
-            boolean yaExiste = players.stream()
-                    .filter(p -> p != null)
-                    .anyMatch(p -> p.toString().equalsIgnoreCase(username));
+            // Comprobar si el usuario ya está en la partida
+            boolean yaExiste = players.stream().anyMatch(p -> {
+                if (p instanceof Map) {
+                    Map<?, ?> map = (Map<?, ?>) p;
+                    return map.containsKey("S") && map.get("S").toString().equalsIgnoreCase(username);
+                }
+                return false;
+            });
 
             if (yaExiste) {
                 return createResponse(400, "{\"valid\":false, \"reason\":\"YA_EXISTE_USUARIO\"}");
             }
 
-            // Comprobar hueco libre
-            boolean hayHueco = players.stream().anyMatch(p -> p == null);
+            // Comprobar si ya hay un hueco libre
+            boolean hayHueco = players.stream().anyMatch(p -> {
+                if (p instanceof Map) {
+                    Map<?, ?> map = (Map<?, ?>) p;
+                    return map.containsKey("NULL") && Boolean.TRUE.equals(map.get("NULL"));
+                }
+                return false;
+            });
 
             if (!hayHueco) {
                 return createResponse(400, "{\"valid\":false, \"reason\":\"LLENO\"}");

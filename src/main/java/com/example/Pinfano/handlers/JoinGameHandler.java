@@ -55,7 +55,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
 
-// Buscar primer hueco libre (solo { "NULL": true })
+            // Buscar primer hueco libre (solo { "NULL": true })
             int indexLibre = -1;
             for (int i = 0; i < players.size(); i++) {
                 Object p = players.get(i);
