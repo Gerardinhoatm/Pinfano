@@ -29,13 +29,13 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
         }
 
         try {
-
             JsonNode body = objectMapper.readTree(request.getBody());
             String codigo = body.get("codigoGame").asText();
             String username = body.get("username").asText();
 
             Table table = dynamoDB.getTable(gamesTable);
 
+            // Buscar partida por codigoGame
             ScanSpec scan = new ScanSpec()
                     .withFilterExpression("codigoGame = :codigoVal")
                     .withValueMap(Map.of(":codigoVal", codigo));
@@ -43,7 +43,8 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             ItemCollection<ScanOutcome> results = table.scan(scan);
 
             if (!results.iterator().hasNext()) {
-                return createResponse(404, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
+                // Esto solo ocurre si algo muy raro pasó, no por validación
+                return createResponse(500, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
             }
 
             Item game = results.iterator().next();
@@ -51,10 +52,6 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
             String idGame = game.getString("idGame");
-
-            if (!"P".equalsIgnoreCase(estado)) {
-                return createResponse(400, "{\"joined\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
-            }
 
             // Buscar primer NULL
             int indexLibre = -1;
@@ -66,28 +63,30 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             }
 
             if (indexLibre == -1) {
-                return createResponse(400, "{\"joined\":false, \"reason\":\"LLENO\"}");
+                // Si ya no hay hueco, pero llegamos aquí significa que la validación falló antes
+                return createResponse(500, "{\"joined\":false, \"reason\":\"NO_HUECO_LIBRE\"}");
             }
 
-            // Insertar jugador
+            // Insertar jugador en el primer hueco libre
             players.set(indexLibre, username);
 
             // Si ya no hay huecos → cambiar estado a A
             boolean lleno = players.stream().noneMatch(p -> p == null);
             if (lleno) estado = "A";
 
-            // Guardar
+            // Guardar en DynamoDB
             table.updateItem(
                     "idGame", idGame,
                     "SET listaPlayers = :p, estado = :e",
                     Map.of(":p", players, ":e", estado)
             );
 
+            // Devuelve siempre 200 si todo se ejecutó correctamente
             return createResponse(200,
                     "{ \"joined\": true, \"estadoFinal\":\"" + estado + "\" }");
 
         } catch (Exception e) {
-            return createResponse(500, "{\"error\":\"" + e.getMessage() + "\"}");
+            return createResponse(500, "{\"joined\":false, \"error\":\"" + e.getMessage() + "\"}");
         }
     }
 
@@ -103,4 +102,3 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 .withBody(body);
     }
 }
-
