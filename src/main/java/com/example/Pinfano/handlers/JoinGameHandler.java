@@ -43,17 +43,20 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             ItemCollection<ScanOutcome> results = table.scan(scan);
 
             if (!results.iterator().hasNext()) {
-                // Esto solo ocurre si algo muy raro pasó, no por validación
-                return createResponse(500, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
+                // Devuelve siempre 200, solo indica joined: false
+                return createResponse(200, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
             }
 
             Item game = results.iterator().next();
-
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
             String idGame = game.getString("idGame");
 
-            // Buscar primer NULL
+            if (!"P".equalsIgnoreCase(estado)) {
+                return createResponse(200, "{\"joined\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
+            }
+
+            // Buscar primer hueco libre
             int indexLibre = -1;
             for (int i = 0; i < players.size(); i++) {
                 if (players.get(i) == null) {
@@ -63,11 +66,10 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             }
 
             if (indexLibre == -1) {
-                // Si ya no hay hueco, pero llegamos aquí significa que la validación falló antes
-                return createResponse(500, "{\"joined\":false, \"reason\":\"NO_HUECO_LIBRE\"}");
+                return createResponse(200, "{\"joined\":false, \"reason\":\"LLENO\"}");
             }
 
-            // Insertar jugador en el primer hueco libre
+            // Insertar jugador
             players.set(indexLibre, username);
 
             // Si ya no hay huecos → cambiar estado a A
@@ -81,12 +83,11 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                     Map.of(":p", players, ":e", estado)
             );
 
-            // Devuelve siempre 200 si todo se ejecutó correctamente
             return createResponse(200,
                     "{ \"joined\": true, \"estadoFinal\":\"" + estado + "\" }");
 
         } catch (Exception e) {
-            return createResponse(500, "{\"joined\":false, \"error\":\"" + e.getMessage() + "\"}");
+            return createResponse(200, "{\"joined\":false, \"reason\":\"ERROR_INTERNO: " + e.getMessage() + "\"}");
         }
     }
 
