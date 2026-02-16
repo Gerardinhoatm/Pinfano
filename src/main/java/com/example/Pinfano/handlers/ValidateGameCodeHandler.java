@@ -29,7 +29,6 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
         }
 
         try {
-
             JsonNode body = objectMapper.readTree(request.getBody());
             String codigo = body.get("codigoGame").asText();
             String username = body.get("username").asText();
@@ -44,17 +43,16 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
             ItemCollection<ScanOutcome> results = table.scan(scan);
 
             if (!results.iterator().hasNext()) {
-                return createResponse(404, "{\"valid\":false, \"reason\":\"NO_EXISTE\"}");
+                return createResponse(200, "{\"valid\":false, \"reason\":\"NO_EXISTE\"}");
             }
 
             Item game = results.iterator().next();
-
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
 
-            // Comprobar estado
+            // Comprobar estado de la partida
             if (!"P".equalsIgnoreCase(estado)) {
-                return createResponse(400, "{\"valid\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
+                return createResponse(200, "{\"valid\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
 
             // Comprobar si el usuario ya está en la partida
@@ -67,10 +65,10 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
             });
 
             if (yaExiste) {
-                return createResponse(400, "{\"valid\":false, \"reason\":\"YA_EXISTE_USUARIO\"}");
+                return createResponse(200, "{\"valid\":false, \"reason\":\"YA_EXISTE_USUARIO\"}");
             }
 
-            // Comprobar si ya hay un hueco libre
+            // Comprobar si hay un hueco libre
             boolean hayHueco = players.stream().anyMatch(p -> {
                 if (p instanceof Map) {
                     Map<?, ?> map = (Map<?, ?>) p;
@@ -80,17 +78,14 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
             });
 
             if (!hayHueco) {
-                return createResponse(400, "{\"valid\":false, \"reason\":\"LLENO\"}");
+                return createResponse(200, "{\"valid\":false, \"reason\":\"LLENO\"}");
             }
 
-            // OK
-            String responseJson =
-                    "{ \"valid\": true, \"reason\":\"OK\" }";
-
-            return createResponse(200, responseJson);
+            // Todo OK
+            return createResponse(200, "{\"valid\":true, \"reason\":\"OK\"}");
 
         } catch (Exception e) {
-            return createResponse(500, "{\"error\":\"" + e.getMessage() + "\"}");
+            return createResponse(200, "{\"valid\":false, \"reason\":\"ERROR_INTERNO: " + e.getMessage() + "\"}");
         }
     }
 
