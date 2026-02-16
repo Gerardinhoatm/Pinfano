@@ -308,6 +308,7 @@ Resources:
             Path: /fichas
             Method: GET
 
+  # función de AddGameToUserFunction para añadir una partida a su lista de partidas
   AddGameToUserFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -330,6 +331,28 @@ Resources:
         Variables:
           USERS_TABLE: PinfanoUsers
 
+  # Función para obtener todas las partidas del usuario
+  GetUserGamesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoGetUserGames
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: PinfanoUsers
+      Handler: com.example.Pinfano.handlers.GetUserGamesHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        GetUserGamesApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /getUserGames
+            Method: POST
+      Environment:
+        Variables:
+          USERS_TABLE: PinfanoUsers
 
   # === Lambda Functions and Routes for Websockets ===
   # funcion ConnectFunction que se conecta al websocket
