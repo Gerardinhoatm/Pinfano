@@ -43,7 +43,6 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             ItemCollection<ScanOutcome> results = table.scan(scan);
 
             if (!results.iterator().hasNext()) {
-                // Devuelve siempre 200, solo indica joined: false
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
             }
 
@@ -56,12 +55,16 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
 
-            // Buscar primer hueco libre
+// Buscar primer hueco libre (solo { "NULL": true })
             int indexLibre = -1;
             for (int i = 0; i < players.size(); i++) {
-                if (players.get(i) == null) {
-                    indexLibre = i;
-                    break;
+                Object p = players.get(i);
+                if (p instanceof Map) {
+                    Map<?,?> map = (Map<?,?>) p;
+                    if (map.containsKey("NULL") && Boolean.TRUE.equals(map.get("NULL"))) {
+                        indexLibre = i;
+                        break;
+                    }
                 }
             }
 
@@ -69,11 +72,21 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return createResponse(200, "{\"joined\":false, \"reason\":\"LLENO\"}");
             }
 
-            // Insertar jugador
+            // Insertar jugador en el hueco
             players.set(indexLibre, username);
 
-            // Si ya no hay huecos → cambiar estado a A
-            boolean lleno = players.stream().noneMatch(p -> p == null);
+            // Comprobar si la lista ya está completa
+            boolean lleno = true;
+            for (Object p : players) {
+                if (p instanceof Map) {
+                    Map<?,?> map = (Map<?,?>) p;
+                    if (map.containsKey("NULL") && Boolean.TRUE.equals(map.get("NULL"))) {
+                        lleno = false;
+                        break;
+                    }
+                }
+            }
+
             if (lleno) estado = "A";
 
             // Guardar en DynamoDB
