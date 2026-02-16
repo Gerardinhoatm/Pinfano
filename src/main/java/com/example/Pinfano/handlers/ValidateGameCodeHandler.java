@@ -72,10 +72,17 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
             boolean hayHueco = players.stream().anyMatch(p -> {
                 if (p instanceof Map) {
                     Map<?, ?> map = (Map<?, ?>) p;
-                    return map.containsKey("NULL") && Boolean.TRUE.equals(map.get("NULL"));
+                    if (map.containsKey("NULL")) {
+                        Object val = map.get("NULL");
+                        // Convertimos a booleano de forma segura
+                        if (val instanceof Boolean) return (Boolean) val;
+                        if (val instanceof String) return Boolean.parseBoolean((String) val);
+                        if (val instanceof Number) return ((Number) val).intValue() != 0;
+                    }
                 }
                 return false;
             });
+
 
             if (!hayHueco) {
                 return createResponse(200, "{\"valid\":false, \"reason\":\"LLENO\"}");
