@@ -77,16 +77,19 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             for (int i = 0; i < players.size(); i++) {
                 Object p = players.get(i);
                 if (p instanceof Map<?, ?> map) {
-                    if (Boolean.TRUE.equals(map.get("NULL"))) {
+                    Object valorNull = map.get("NULL");
+                    if (valorNull != null && valorNull.toString().equalsIgnoreCase("true")) {
                         indexLibre = i;
                         break;
                     }
                 }
             }
 
+            // Insertar directamente, sin marcar como lleno si no hay huecos
             if (indexLibre == -1) {
-                context.getLogger().log("No hay huecos libres. Partida llena.\n");
-                return createResponse(200, "{\"joined\":false, \"reason\":\"LLENO\"}");
+                // Si no hay NULL, meterlo al final si quieres (opcional)
+                indexLibre = players.size();
+                players.add(new HashMap<>()); // añadir hueco temporal
             }
 
             context.getLogger().log("Insertando jugador en el hueco: " + indexLibre + "\n");
