@@ -3,7 +3,7 @@ package com.example.Pinfano.handlers;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.*;
-import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
+import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
@@ -23,77 +23,61 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
-
-        context.getLogger().log("=== JOIN GAME HANDLER INICIADO ===\n");
-
-        if ("OPTIONS".equalsIgnoreCase(request.getHttpMethod())) {
-            context.getLogger().log("Request OPTIONS recibido.\n");
-            return createResponse(200, "{\"message\":\"OK\"}");
-        }
-
         try {
-            // ============================
-            // Leer BODY
-            // ============================
-            context.getLogger().log("Body recibido: " + request.getBody() + "\n");
+            context.getLogger().log("=== JOIN GAME HANDLER INICIADO ===\n");
 
+            // ============================
+            // Leer BODY desde el cliente
+            // ============================
             JsonNode body = objectMapper.readTree(request.getBody());
             String codigo = body.get("codigoGame").asText();
             String username = body.get("username").asText();
 
+            context.getLogger().log("Body recibido: " + request.getBody() + "\n");
             context.getLogger().log("Código recibido: " + codigo + "\n");
             context.getLogger().log("Username recibido: " + username + "\n");
 
             Table table = dynamoDB.getTable(gamesTable);
 
             // ============================
-            // Buscar partida por código
+            // Buscar partida por código (Scan)
             // ============================
-            context.getLogger().log("Ejecutando query por codigoGame...\n");
-
-            QuerySpec query = new QuerySpec()
-                    .withKeyConditionExpression("codigoGame = :v")
+            context.getLogger().log("Ejecutando scan por codigoGame...\n");
+            ScanSpec scan = new ScanSpec()
+                    .withFilterExpression("codigoGame = :v")
                     .withValueMap(new ValueMap().withString(":v", codigo));
 
-            ItemCollection<QueryOutcome> results = table.query(query);
-
+            ItemCollection<ScanOutcome> results = table.scan(scan);
             Iterator<Item> iterator = results.iterator();
+
             if (!iterator.hasNext()) {
-                context.getLogger().log("No existe partida con ese codigo.\n");
+                context.getLogger().log("No se encontró partida con ese código\n");
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
             }
 
             Item game = iterator.next();
-            context.getLogger().log("Partida encontrada: " + game.toJSONPretty() + "\n");
-
+            String idGame = game.getString("idGame");
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
-            String idGame = game.getString("idGame");
 
-            context.getLogger().log("Estado actual partida: " + estado + "\n");
-            context.getLogger().log("ID Game: " + idGame + "\n");
-            context.getLogger().log("Lista players: " + players + "\n");
+            context.getLogger().log("Partida encontrada. idGame: " + idGame + ", estado: " + estado + "\n");
 
             // ============================
             // Validar estado
             // ============================
             if (!"P".equalsIgnoreCase(estado)) {
-                context.getLogger().log("La partida NO permite unirse (estado != P)\n");
+                context.getLogger().log("La partida no permite unirse. Estado: " + estado + "\n");
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
 
             // ============================
-            // Buscar hueco NULL
+            // Buscar primer hueco NULL
             // ============================
             int indexLibre = -1;
-
             for (int i = 0; i < players.size(); i++) {
                 Object p = players.get(i);
-                context.getLogger().log("Revisando slot " + i + ": " + p + "\n");
-
                 if (p instanceof Map<?, ?> map) {
-                    if (map.containsKey("NULL") && Boolean.TRUE.equals(map.get("NULL"))) {
-                        context.getLogger().log("Hueco libre encontrado en posicion: " + i + "\n");
+                    if (Boolean.TRUE.equals(map.get("NULL"))) {
                         indexLibre = i;
                         break;
                     }
@@ -101,40 +85,35 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             }
 
             if (indexLibre == -1) {
-                context.getLogger().log("Partida LLENA.\n");
+                context.getLogger().log("No hay huecos libres. Partida llena.\n");
                 return createResponse(200, "{\"joined\":false, \"reason\":\"LLENO\"}");
             }
 
-            // Insertar jugador
-            Map<String, Object> nuevoJugador = new HashMap<>();
-            nuevoJugador.put("S", username);
-
-            players.set(indexLibre, nuevoJugador);
-
-            context.getLogger().log("Jugador insertado en posición " + indexLibre + "\n");
-            context.getLogger().log("Lista actualizada: " + players + "\n");
+            context.getLogger().log("Insertando jugador en el hueco: " + indexLibre + "\n");
 
             // ============================
-            // Comprobar si aún quedan NULL
+            // Insertar jugador en el hueco
+            // ============================
+            Map<String, Object> nuevoJugador = new HashMap<>();
+            nuevoJugador.put("S", username);
+            players.set(indexLibre, nuevoJugador);
+
+            // ============================
+            // Comprobar si queda algún NULL
             // ============================
             boolean quedanHuecos = players.stream().anyMatch(p ->
                     p instanceof Map<?, ?> map &&
-                            map.containsKey("NULL") &&
                             Boolean.TRUE.equals(map.get("NULL"))
             );
 
-            context.getLogger().log("Quedan huecos? " + quedanHuecos + "\n");
-
             if (!quedanHuecos) {
-                estado = "A";
-                context.getLogger().log("La partida está completa. Nuevo estado: A\n");
+                estado = "A"; // Todos los jugadores están → activar partida
+                context.getLogger().log("Partida llena. Cambiando estado a: " + estado + "\n");
             }
 
             // ============================
-            // Guardar
+            // Guardar cambios en DynamoDB
             // ============================
-            context.getLogger().log("Actualizando partida en DynamoDB...\n");
-
             table.updateItem(
                     "idGame", idGame,
                     "SET listaPlayers = :p, estado = :e",
@@ -143,21 +122,18 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                             .withString(":e", estado)
             );
 
-            context.getLogger().log("Partida actualizada correctamente.\n");
+            context.getLogger().log("Jugador insertado correctamente. Respuesta enviada.\n");
 
-            return createResponse(200, "{ \"joined\": true, \"estadoFinal\":\"" + estado + "\" }");
+            // ============================
+            // Respuesta OK
+            // ============================
+            return createResponse(200,
+                    "{ \"joined\": true, \"estadoFinal\":\"" + estado + "\" }");
 
         } catch (Exception e) {
-
-            context.getLogger().log("ERROR INTERNO: " + e.getMessage() + "\n");
-            context.getLogger().log("STACKTRACE:\n");
-
-            for (StackTraceElement st : e.getStackTrace()) {
-                context.getLogger().log(st.toString() + "\n");
-            }
-
-            return createResponse(200,
-                    "{\"joined\":false, \"reason\":\"ERROR_INTERNO: " + e.getMessage() + "\"}");
+            String msg = "ERROR_INTERNO: " + e.getMessage();
+            System.out.println(msg);
+            return createResponse(200, "{\"joined\":false, \"reason\":\"" + msg + "\"}");
         }
     }
 
