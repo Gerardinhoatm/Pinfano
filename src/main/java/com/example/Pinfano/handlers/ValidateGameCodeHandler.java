@@ -48,7 +48,7 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
 
             Item game = results.iterator().next();
             String estado = game.getString("estado");
-            List<Object> players = game.getList("listaPlayers");
+            List<String> players = game.getList("listaPlayers");
 
             // Si el estado no es P, no se permite unirse
             if (!"P".equalsIgnoreCase(estado)) {
@@ -56,13 +56,8 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
             }
 
             // Comprobar si el usuario ya está en la partida
-            boolean yaExiste = players.stream().anyMatch(p -> {
-                if (p instanceof Map) {
-                    Map<?, ?> map = (Map<?, ?>) p;
-                    return map.containsKey("S") && map.get("S").toString().equalsIgnoreCase(username);
-                }
-                return false;
-            });
+            boolean yaExiste = players.stream()
+                    .anyMatch(p -> p.equalsIgnoreCase(username));
 
             if (yaExiste) {
                 return createResponse(200, "{\"valid\":false, \"reason\":\"YA_EXISTE_USUARIO\"}");
