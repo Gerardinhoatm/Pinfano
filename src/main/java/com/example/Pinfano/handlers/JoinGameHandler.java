@@ -26,9 +26,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
         try {
             context.getLogger().log("=== JOIN GAME HANDLER INICIADO ===\n");
 
-            // ============================
             // Leer BODY desde el cliente
-            // ============================
             JsonNode body = objectMapper.readTree(request.getBody());
             String codigo = body.get("codigoGame").asText();
             String username = body.get("username").asText();
@@ -39,9 +37,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             Table table = dynamoDB.getTable(gamesTable);
 
-            // ============================
             // Buscar partida por código (Scan)
-            // ============================
             context.getLogger().log("Ejecutando scan por codigoGame...\n");
             ScanSpec scan = new ScanSpec()
                     .withFilterExpression("codigoGame = :v")
@@ -59,51 +55,51 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             String idGame = game.getString("idGame");
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
+
             context.getLogger().log("Lista de jugadores antes de insertar: " + objectMapper.writeValueAsString(players) + "\n");
             context.getLogger().log("Partida encontrada. idGame: " + idGame + ", estado: " + estado + "\n");
 
-            // ============================
-            // Insertar jugador en el primer NULL usando while
-            // ============================
+            // Insertar jugador en el primer hueco NULL o null usando while
             int i = 0;
             boolean insertado = false;
             while (i < players.size() && !insertado) {
                 Object p = players.get(i);
-                if (p instanceof Map<?, ?> map) {
-                    Object valorNull = map.get("NULL");
-                    if (valorNull != null && valorNull.toString().equalsIgnoreCase("true")) {
-                        Map<String, Object> nuevoJugador = new HashMap<>();
-                        nuevoJugador.put("S", username);
-                        players.set(i, nuevoJugador);
-                        context.getLogger().log("Jugador insertado en el hueco: " + i + "\n");
-                        insertado = true;
-                    }
+                if (p == null) {
+                    Map<String, Object> nuevoJugador = new HashMap<>();
+                    nuevoJugador.put("S", username);
+                    players.set(i, nuevoJugador);
+                    context.getLogger().log("Jugador insertado en el hueco (null) en posición: " + i + "\n");
+                    insertado = true;
+                } else if (p instanceof Map<?, ?> map && Boolean.TRUE.equals(map.get("NULL"))) {
+                    Map<String, Object> nuevoJugador = new HashMap<>();
+                    nuevoJugador.put("S", username);
+                    players.set(i, nuevoJugador);
+                    context.getLogger().log("Jugador insertado en el hueco (NULL) en posición: " + i + "\n");
+                    insertado = true;
                 }
                 i++;
             }
 
             if (!insertado) {
-                context.getLogger().log("No se encontró ningún NULL para insertar al jugador, revisar listaPlayers.\n");
+                context.getLogger().log("No se encontró ningún hueco para insertar al jugador, revisar listaPlayers.\n");
                 return createResponse(200, "{\"joined\":false, \"reason\":\"SIN_HUECO\"}");
             }
 
-            // ============================
-            // Comprobar si quedan NULL para activar partida
-            // ============================
-            boolean quedanHuecos = players.stream().anyMatch(p ->
-                    p instanceof Map<?, ?> map &&
-                            map.get("NULL") != null &&
-                            map.get("NULL").toString().equalsIgnoreCase("true")
-            );
+            // Comprobar si quedan NULL o null para activar partida
+            boolean quedanHuecos = false;
+            for (Object p : players) {
+                if (p == null || (p instanceof Map<?, ?> map && Boolean.TRUE.equals(map.get("NULL")))) {
+                    quedanHuecos = true;
+                    break;
+                }
+            }
 
             if (!quedanHuecos) {
                 estado = "A"; // Todos los jugadores están → activar partida
                 context.getLogger().log("Todos los jugadores están. Cambiando estado a: " + estado + "\n");
             }
 
-            // ============================
             // Guardar cambios en DynamoDB
-            // ============================
             table.updateItem(
                     "idGame", idGame,
                     "SET listaPlayers = :p, estado = :e",
@@ -112,17 +108,15 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                             .withString(":e", estado)
             );
 
-            context.getLogger().log("Jugador insertado correctamente. Respuesta enviada.\n");
+            context.getLogger().log("Jugador insertado correctamente. Lista de jugadores después de insertar: " + objectMapper.writeValueAsString(players) + "\n");
 
-            // ============================
             // Respuesta OK
-            // ============================
             return createResponse(200,
                     "{ \"joined\": true, \"estadoFinal\":\"" + estado + "\" }");
 
         } catch (Exception e) {
             String msg = "ERROR_INTERNO: " + e.getMessage();
-            System.out.println(msg);
+            context.getLogger().log(msg + "\n");
             return createResponse(200, "{\"joined\":false, \"reason\":\"" + msg + "\"}");
         }
     }
@@ -139,3 +133,4 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 .withBody(body);
     }
 }
+
