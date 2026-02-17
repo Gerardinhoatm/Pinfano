@@ -62,43 +62,26 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             context.getLogger().log("Lista de jugadores antes de insertar: " + objectMapper.writeValueAsString(players) + "\n");
             context.getLogger().log("Partida encontrada. codigoGame: " + codigo + ", estado: " + estado + "\n");
 
-            // ============================
-            // Insertar jugador en el primer NULL usando while
-            // ============================
+            // Buscar primer "VACIO"
             int i = 0;
             boolean insertado = false;
             while (i < players.size() && !insertado) {
                 Object p = players.get(i);
-                if (p instanceof Map<?, ?> map) {
-                    Object valorNull = map.get("NULL");
-                    if (valorNull != null && valorNull.toString().equalsIgnoreCase("true")) {
-                        Map<String, Object> nuevoJugador = new HashMap<>();
-                        nuevoJugador.put("S", username);
-                        players.set(i, nuevoJugador);
-                        context.getLogger().log("Jugador insertado en el hueco (NULL) en posición: " + i + "\n");
-                        insertado = true;
-                    }
+                if (p instanceof String && p.equals("VACIO")) {
+                    players.set(i, username);  // Insertamos directamente el username
+                    insertado = true;
                 }
                 i++;
             }
 
             if (!insertado) {
-                context.getLogger().log("No se encontró ningún NULL para insertar al jugador, revisar listaPlayers.\n");
                 return createResponse(200, "{\"joined\":false, \"reason\":\"SIN_HUECO\"}");
             }
 
-            // ============================
-            // Comprobar si quedan NULL para activar partida
-            // ============================
-            boolean quedanHuecos = players.stream().anyMatch(p ->
-                    p instanceof Map<?, ?> map &&
-                            map.get("NULL") != null &&
-                            map.get("NULL").toString().equalsIgnoreCase("true")
-            );
-
+            // Revisar si quedan huecos para cambiar estado
+            boolean quedanHuecos = players.stream().anyMatch(p -> p instanceof String && p.equals("VACIO"));
             if (!quedanHuecos) {
                 estado = "A"; // Todos los jugadores están → activar partida
-                context.getLogger().log("Todos los jugadores están. Cambiando estado a: " + estado + "\n");
             }
 
             // ============================

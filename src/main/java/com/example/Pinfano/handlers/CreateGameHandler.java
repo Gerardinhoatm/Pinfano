@@ -54,7 +54,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             if (listaPlayersNode != null && listaPlayersNode.isArray()) {
                 for (JsonNode jugador : listaPlayersNode) {
                     if (jugador.isNull()) {
-                        listaPlayers.add(null);
+                        listaPlayers.add("VACIO");
                     } else {
                         listaPlayers.add(jugador.asText());
                     }
