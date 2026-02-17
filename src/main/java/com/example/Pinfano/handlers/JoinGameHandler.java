@@ -63,55 +63,42 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             context.getLogger().log("Partida encontrada. idGame: " + idGame + ", estado: " + estado + "\n");
 
             // ============================
-            // Validar estado
+            // Insertar jugador en el primer NULL usando while
             // ============================
-            if (!"P".equalsIgnoreCase(estado)) {
-                context.getLogger().log("La partida no permite unirse. Estado: " + estado + "\n");
-                return createResponse(200, "{\"joined\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
-            }
-
-            // ============================
-            // Buscar primer hueco NULL
-            // ============================
-            int indexLibre = -1;
-            for (int i = 0; i < players.size(); i++) {
+            int i = 0;
+            boolean insertado = false;
+            while (i < players.size() && !insertado) {
                 Object p = players.get(i);
                 if (p instanceof Map<?, ?> map) {
                     Object valorNull = map.get("NULL");
                     if (valorNull != null && valorNull.toString().equalsIgnoreCase("true")) {
-                        indexLibre = i;
-                        break;
+                        Map<String, Object> nuevoJugador = new HashMap<>();
+                        nuevoJugador.put("S", username);
+                        players.set(i, nuevoJugador);
+                        context.getLogger().log("Jugador insertado en el hueco: " + i + "\n");
+                        insertado = true;
                     }
                 }
+                i++;
             }
 
-            // Insertar directamente, sin marcar como lleno si no hay huecos
-            if (indexLibre == -1) {
-                // Si no hay NULL, meterlo al final si quieres (opcional)
-                indexLibre = players.size();
-                players.add(new HashMap<>()); // añadir hueco temporal
+            if (!insertado) {
+                context.getLogger().log("No se encontró ningún NULL para insertar al jugador, revisar listaPlayers.\n");
+                return createResponse(200, "{\"joined\":false, \"reason\":\"SIN_HUECO\"}");
             }
 
-            context.getLogger().log("Insertando jugador en el hueco: " + indexLibre + "\n");
-
             // ============================
-            // Insertar jugador en el hueco
-            // ============================
-            Map<String, Object> nuevoJugador = new HashMap<>();
-            nuevoJugador.put("S", username);
-            players.set(indexLibre, nuevoJugador);
-
-            // ============================
-            // Comprobar si queda algún NULL
+            // Comprobar si quedan NULL para activar partida
             // ============================
             boolean quedanHuecos = players.stream().anyMatch(p ->
                     p instanceof Map<?, ?> map &&
-                            Boolean.TRUE.equals(map.get("NULL"))
+                            map.get("NULL") != null &&
+                            map.get("NULL").toString().equalsIgnoreCase("true")
             );
 
             if (!quedanHuecos) {
                 estado = "A"; // Todos los jugadores están → activar partida
-                context.getLogger().log("Partida llena. Cambiando estado a: " + estado + "\n");
+                context.getLogger().log("Todos los jugadores están. Cambiando estado a: " + estado + "\n");
             }
 
             // ============================
