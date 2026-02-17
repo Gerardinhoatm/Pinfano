@@ -59,7 +59,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             String idGame = game.getString("idGame");
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
-
+            context.getLogger().log("Lista de jugadores antes de insertar: " + objectMapper.writeValueAsString(players) + "\n");
             context.getLogger().log("Partida encontrada. idGame: " + idGame + ", estado: " + estado + "\n");
 
             // ============================
