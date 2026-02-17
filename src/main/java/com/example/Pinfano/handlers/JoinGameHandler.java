@@ -87,13 +87,12 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             // ============================
             // Guardar cambios en DynamoDB
             // ============================
-            table.updateItem(
-                    "codigoGame", codigo, // <--- Usar la partition key correcta
-                    "SET listaPlayers = :p, estado = :e",
-                    new ValueMap()
-                            .withList(":p", players)
-                            .withString(":e", estado)
-            );
+            // Actualizamos directamente el Item obtenido del scan
+            game.withList("listaPlayers", players)
+                    .withString("estado", estado);
+
+            // Guardamos el Item completo de nuevo
+            table.putItem(game);
 
             context.getLogger().log("Jugador insertado correctamente. Lista de jugadores ahora: "
                     + objectMapper.writeValueAsString(players) + "\n");
@@ -123,5 +122,3 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 .withBody(body);
     }
 }
-
-
