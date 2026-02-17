@@ -3,7 +3,8 @@ package com.example.Pinfano.handlers;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.*;
-import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
+import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
+import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
@@ -11,8 +12,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
@@ -29,40 +29,52 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
         }
 
         try {
+            // ============================
+            // Leer BODY desde el cliente
+            // ============================
             JsonNode body = objectMapper.readTree(request.getBody());
             String codigo = body.get("codigoGame").asText();
             String username = body.get("username").asText();
 
             Table table = dynamoDB.getTable(gamesTable);
 
-            ScanSpec scan = new ScanSpec()
-                    .withFilterExpression("codigoGame = :codigoVal")
-                    .withValueMap(Map.of(":codigoVal", codigo));
+            // ============================
+            // Buscar partida por código
+            // ============================
+            QuerySpec query = new QuerySpec()
+                    .withKeyConditionExpression("codigoGame = :v")
+                    .withValueMap(new ValueMap().withString(":v", codigo));
 
-            ItemCollection<ScanOutcome> results = table.scan(scan);
+            ItemCollection<QueryOutcome> results = table.query(query);
 
-            if (!results.iterator().hasNext()) {
+            Iterator<Item> iterator = results.iterator();
+            if (!iterator.hasNext()) {
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
             }
 
-            Item game = results.iterator().next();
+            Item game = iterator.next();
+
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
             String idGame = game.getString("idGame");
 
+            // ============================
+            // Validar estado
+            // ============================
             if (!"P".equalsIgnoreCase(estado)) {
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
 
-            // =============================
-            // 1. Insertar en el primer NULL
-            // =============================
+            // ============================
+            // 1. Buscar hueco NULL
+            // ============================
             int indexLibre = -1;
 
             for (int i = 0; i < players.size(); i++) {
                 Object p = players.get(i);
-                if (p instanceof Map map) {
-                    if (Boolean.TRUE.equals(map.get("NULL"))) {
+
+                if (p instanceof Map<?,?> map) {
+                    if (map.containsKey("NULL") && Boolean.TRUE.equals(map.get("NULL"))) {
                         indexLibre = i;
                         break;
                     }
@@ -73,30 +85,41 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return createResponse(200, "{\"joined\":false, \"reason\":\"LLENO\"}");
             }
 
-            // Reemplazar ese hueco por el usuario
-            players.set(indexLibre, Map.of("S", username));
+            // ============================
+            // 2. Insertar el jugador
+            // ============================
+            Map<String, Object> nuevoJugador = new HashMap<>();
+            nuevoJugador.put("S", username);
 
-            // =============================
-            // 2. Comprobar si quedan NULL
-            // =============================
+            players.set(indexLibre, nuevoJugador);
+
+            // ============================
+            // 3. Comprobar si queda algún NULL
+            // ============================
             boolean quedanHuecos = players.stream().anyMatch(p ->
-                    (p instanceof Map map) &&
+                    p instanceof Map<?,?> map &&
+                            map.containsKey("NULL") &&
                             Boolean.TRUE.equals(map.get("NULL"))
             );
 
             if (!quedanHuecos) {
-                estado = "A"; // Partida llena → estado activo
+                estado = "A"; // Todos los jugadores están → activar partida
             }
 
-            // =============================
-            // 3. Guardar en DynamoDB
-            // =============================
+            // ============================
+            // 4. Guardar en DynamoDB
+            // ============================
             table.updateItem(
                     "idGame", idGame,
                     "SET listaPlayers = :p, estado = :e",
-                    Map.of(":p", players, ":e", estado)
+                    new ValueMap()
+                            .withList(":p", players)
+                            .withString(":e", estado)
             );
 
+            // ============================
+            // 5. Respuesta OK
+            // ============================
             return createResponse(200,
                     "{ \"joined\": true, \"estadoFinal\":\"" + estado + "\" }");
 
