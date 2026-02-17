@@ -50,7 +50,7 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
 
-            // Comprobar estado de la partida
+            // Si el estado no es P, no se permite unirse
             if (!"P".equalsIgnoreCase(estado)) {
                 return createResponse(200, "{\"valid\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
@@ -68,27 +68,7 @@ public class ValidateGameCodeHandler implements RequestHandler<APIGatewayProxyRe
                 return createResponse(200, "{\"valid\":false, \"reason\":\"YA_EXISTE_USUARIO\"}");
             }
 
-            // Comprobar si hay un hueco libre
-            boolean hayHueco = players.stream().anyMatch(p -> {
-                if (p instanceof Map) {
-                    Map<?, ?> map = (Map<?, ?>) p;
-                    if (map.containsKey("NULL")) {
-                        Object val = map.get("NULL");
-                        // Convertimos a booleano de forma segura
-                        if (val instanceof Boolean) return (Boolean) val;
-                        if (val instanceof String) return Boolean.parseBoolean((String) val);
-                        if (val instanceof Number) return ((Number) val).intValue() != 0;
-                    }
-                }
-                return false;
-            });
-
-
-            if (!hayHueco) {
-                return createResponse(200, "{\"valid\":false, \"reason\":\"LLENO\"}");
-            }
-
-            // Todo OK
+            // Si el estado es P, asumimos que hay hueco automáticamente
             return createResponse(200, "{\"valid\":true, \"reason\":\"OK\"}");
 
         } catch (Exception e) {
