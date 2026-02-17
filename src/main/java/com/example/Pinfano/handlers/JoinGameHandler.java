@@ -35,7 +35,6 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             Table table = dynamoDB.getTable(gamesTable);
 
-            // Buscar partida por codigoGame
             ScanSpec scan = new ScanSpec()
                     .withFilterExpression("codigoGame = :codigoVal")
                     .withValueMap(Map.of(":codigoVal", codigo));
@@ -55,13 +54,15 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_PERMITE_UNIRSE\"}");
             }
 
-            // Buscar primer hueco libre (solo { "NULL": true })
+            // =============================
+            // 1. Insertar en el primer NULL
+            // =============================
             int indexLibre = -1;
+
             for (int i = 0; i < players.size(); i++) {
                 Object p = players.get(i);
-                if (p instanceof Map) {
-                    Map<?,?> map = (Map<?,?>) p;
-                    if (map.containsKey("NULL") && Boolean.TRUE.equals(map.get("NULL"))) {
+                if (p instanceof Map map) {
+                    if (Boolean.TRUE.equals(map.get("NULL"))) {
                         indexLibre = i;
                         break;
                     }
@@ -72,24 +73,24 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return createResponse(200, "{\"joined\":false, \"reason\":\"LLENO\"}");
             }
 
-            // Insertar jugador en el hueco
-            players.set(indexLibre, username);
+            // Reemplazar ese hueco por el usuario
+            players.set(indexLibre, Map.of("S", username));
 
-            // Comprobar si la lista ya está completa
-            boolean lleno = true;
-            for (Object p : players) {
-                if (p instanceof Map) {
-                    Map<?,?> map = (Map<?,?>) p;
-                    if (map.containsKey("NULL") && Boolean.TRUE.equals(map.get("NULL"))) {
-                        lleno = false;
-                        break;
-                    }
-                }
+            // =============================
+            // 2. Comprobar si quedan NULL
+            // =============================
+            boolean quedanHuecos = players.stream().anyMatch(p ->
+                    (p instanceof Map map) &&
+                            Boolean.TRUE.equals(map.get("NULL"))
+            );
+
+            if (!quedanHuecos) {
+                estado = "A"; // Partida llena → estado activo
             }
 
-            if (lleno) estado = "A";
-
-            // Guardar en DynamoDB
+            // =============================
+            // 3. Guardar en DynamoDB
+            // =============================
             table.updateItem(
                     "idGame", idGame,
                     "SET listaPlayers = :p, estado = :e",
@@ -100,7 +101,8 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                     "{ \"joined\": true, \"estadoFinal\":\"" + estado + "\" }");
 
         } catch (Exception e) {
-            return createResponse(200, "{\"joined\":false, \"reason\":\"ERROR_INTERNO: " + e.getMessage() + "\"}");
+            return createResponse(200,
+                    "{\"joined\":false, \"reason\":\"ERROR_INTERNO: " + e.getMessage() + "\"}");
         }
     }
 
