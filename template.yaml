@@ -353,7 +353,7 @@ Resources:
       Environment:
         Variables:
           USERS_TABLE: PinfanoUsers
-
+  #Funcion valdar si se puede unir a un game
   ValidateGameCodeFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -375,7 +375,7 @@ Resources:
       Environment:
         Variables:
           GAMES_TABLE: PinfanoGames
-
+  #Funcion para unirse a dicho game despues de validar
   JoinGameFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -394,6 +394,29 @@ Resources:
             RestApiId: !Ref PinfanoRestApi
             Path: /joinGame
             Method: POST
+      Environment:
+        Variables:
+          GAMES_TABLE: PinfanoGames
+
+  # función de GetGameByCodigo: obtiene la partida por su código
+  GetGameByCodigoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoGetGameByCodigo
+      Policies:
+        - DynamoDBReadPolicy: # Solo lectura porque solo consulta
+            TableName: PinfanoGames
+      Handler: com.example.Pinfano.handlers.GetGameByCodigoHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        GetGameByCodigoApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /gamecode
+            Method: GET
       Environment:
         Variables:
           GAMES_TABLE: PinfanoGames

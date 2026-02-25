@@ -24,34 +24,20 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
         try {
-            context.getLogger().log("=== JOIN GAME HANDLER INICIADO ===\n");
-
-            // ============================
-            // Leer BODY desde el cliente
-            // ============================
             JsonNode body = objectMapper.readTree(request.getBody());
             String codigo = body.get("codigoGame").asText();
             String username = body.get("username").asText();
 
-            context.getLogger().log("Body recibido: " + request.getBody() + "\n");
-            context.getLogger().log("Código recibido: " + codigo + "\n");
-            context.getLogger().log("Username recibido: " + username + "\n");
-
             Table table = dynamoDB.getTable(gamesTable);
 
-            // ============================
-            // Buscar partida por código (Scan)
-            // ============================
-            context.getLogger().log("Ejecutando scan por codigoGame...\n");
+            // Buscar partida por código
             ScanSpec scan = new ScanSpec()
                     .withFilterExpression("codigoGame = :v")
                     .withValueMap(new ValueMap().withString(":v", codigo));
 
-            ItemCollection<ScanOutcome> results = table.scan(scan);
-            Iterator<Item> iterator = results.iterator();
+            Iterator<Item> iterator = table.scan(scan).iterator();
 
             if (!iterator.hasNext()) {
-                context.getLogger().log("No se encontró partida con ese código\n");
                 return createResponse(200, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
             }
 
@@ -59,54 +45,46 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             String estado = game.getString("estado");
             List<Object> players = game.getList("listaPlayers");
 
-            context.getLogger().log("Lista de jugadores antes de insertar: " + objectMapper.writeValueAsString(players) + "\n");
-            context.getLogger().log("Partida encontrada. codigoGame: " + codigo + ", estado: " + estado + "\n");
+            boolean yaEsta = players.stream()
+                    .anyMatch(p -> p instanceof String && ((String) p).equalsIgnoreCase(username));
+
+            // Si ya está dentro → idempotente, joined=true
+            if (yaEsta) {
+                return createResponse(200, "{ \"joined\": true, \"estadoFinal\": \"" + estado + "\" }");
+            }
 
             // Buscar primer "VACIO"
-            int i = 0;
             boolean insertado = false;
-            while (i < players.size() && !insertado) {
+            for (int i = 0; i < players.size(); i++) {
                 Object p = players.get(i);
                 if (p instanceof String && p.equals("VACIO")) {
-                    players.set(i, username);  // Insertamos directamente el username
+                    players.set(i, username);
                     insertado = true;
+                    break;
                 }
-                i++;
             }
 
             if (!insertado) {
+                // No había hueco y usuario no estaba → error
                 return createResponse(200, "{\"joined\":false, \"reason\":\"SIN_HUECO\"}");
             }
 
             // Revisar si quedan huecos para cambiar estado
-            boolean quedanHuecos = players.stream().anyMatch(p -> p instanceof String && p.equals("VACIO"));
+            boolean quedanHuecos = players.stream()
+                    .anyMatch(p -> p instanceof String && p.equals("VACIO"));
             if (!quedanHuecos) {
-                estado = "A"; // Todos los jugadores están → activar partida
+                estado = "A"; // activar partida
             }
 
-            // ============================
             // Guardar cambios en DynamoDB
-            // ============================
-            // Actualizamos directamente el Item obtenido del scan
             game.withList("listaPlayers", players)
                     .withString("estado", estado);
-
-            // Guardamos el Item completo de nuevo
             table.putItem(game);
 
-            context.getLogger().log("Jugador insertado correctamente. Lista de jugadores ahora: "
-                    + objectMapper.writeValueAsString(players) + "\n");
-
-            // ============================
-            // Respuesta OK
-            // ============================
-            return createResponse(200,
-                    "{ \"joined\": true, \"estadoFinal\":\"" + estado + "\" }");
+            return createResponse(200, "{ \"joined\": true, \"estadoFinal\": \"" + estado + "\" }");
 
         } catch (Exception e) {
-            String msg = "ERROR_INTERNO: " + e.getMessage();
-            System.out.println(msg);
-            return createResponse(200, "{\"joined\":false, \"reason\":\"" + msg + "\"}");
+            return createResponse(200, "{\"joined\":false, \"reason\":\"ERROR_INTERNO: " + e.getMessage() + "\"}");
         }
     }
 
