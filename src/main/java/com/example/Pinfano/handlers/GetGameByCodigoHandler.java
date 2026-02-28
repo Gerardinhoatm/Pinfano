@@ -34,10 +34,12 @@ public class GetGameByCodigoHandler implements RequestHandler<APIGatewayProxyReq
         try {
             // Leemos el header X-CodigoGame
             Map<String, String> headers = event.getHeaders();
-            String codigoGame = headers != null ? headers.get("X-CodigoGame") : null;
+            String codigoGame = headers != null ? headers.get("X-codigoGame") : null;
+            String username = headers != null ? headers.get("x-username") : null;
 
+            context.getLogger().log("📌 Header recibido - x-codigogame: " + codigoGame + ", x-username: " + username);
             if (codigoGame == null || codigoGame.isEmpty()) {
-                return createResponse(400, "Falta X-CodigoGame en headers");
+                return createResponse(400, "Falta X-codigoGame en headers");
             }
 
             Table table = dynamoDB.getTable(gameTable);
