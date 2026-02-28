@@ -9,8 +9,6 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 
@@ -18,7 +16,6 @@ public class GetGameByCodigo implements RequestHandler<APIGatewayProxyRequestEve
 
     private final AmazonDynamoDB dynamoClient = AmazonDynamoDBClientBuilder.defaultClient();
     private final DynamoDB dynamoDB = new DynamoDB(dynamoClient);
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final String gameTable = System.getenv().getOrDefault("GAMES_TABLE", "PinfanoGames");
 
     @Override
@@ -29,24 +26,27 @@ public class GetGameByCodigo implements RequestHandler<APIGatewayProxyRequestEve
                     .withStatusCode(200)
                     .withHeaders(Map.of(
                             "Access-Control-Allow-Origin", "*",
-                            "Access-Control-Allow-Methods", "POST, OPTIONS",
+                            "Access-Control-Allow-Methods", "GET, OPTIONS",
                             "Access-Control-Allow-Headers", "*"
                     ));
         }
 
         try {
-            JsonNode body = objectMapper.readTree(event.getBody());
-            String codigoGame = body.get("codigoGame").asText();
+            // Leemos el header X-CodigoGame
+            Map<String, String> headers = event.getHeaders();
+            String codigoGame = headers != null ? headers.get("X-CodigoGame") : null;
+
+            if (codigoGame == null || codigoGame.isEmpty()) {
+                return createResponse(400, "Falta X-CodigoGame en headers");
+            }
 
             Table table = dynamoDB.getTable(gameTable);
-
             Item item = table.getItem("codigoGame", codigoGame);
 
             if (item == null) {
                 return createResponse(404, "Game no encontrado");
             }
 
-            // devolver todo el item como JSON
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(200)
                     .withHeaders(Map.of(
@@ -64,7 +64,10 @@ public class GetGameByCodigo implements RequestHandler<APIGatewayProxyRequestEve
     private APIGatewayProxyResponseEvent createResponse(int code, String msg) {
         return new APIGatewayProxyResponseEvent()
                 .withStatusCode(code)
-                .withHeaders(Map.of("Access-Control-Allow-Origin", "*"))
+                .withHeaders(Map.of(
+                        "Access-Control-Allow-Origin", "*",
+                        "Access-Control-Allow-Headers", "*"
+                ))
                 .withBody("{\"message\":\"" + msg + "\"}");
     }
 }
