@@ -4,12 +4,15 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Item;
+import com.amazonaws.services.dynamodbv2.document.ItemCollection;
+import com.amazonaws.services.dynamodbv2.document.ScanOutcome;
 import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 
+import java.util.Iterator;
 import java.util.Map;
 
 public class GetGameByCodigoHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
@@ -21,6 +24,7 @@ public class GetGameByCodigoHandler implements RequestHandler<APIGatewayProxyReq
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
 
+        // Manejo del preflight para CORS
         if ("OPTIONS".equalsIgnoreCase(event.getHttpMethod())) {
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(200)
@@ -49,16 +53,27 @@ public class GetGameByCodigoHandler implements RequestHandler<APIGatewayProxyReq
             }
 
             context.getLogger().log("📌 Header recibido - X-codigogame: " + codigoGame + ", X-username: " + username);
+
             if (codigoGame == null || codigoGame.isEmpty()) {
                 return createResponse(400, "Falta X-codigoGame en headers");
             }
 
             Table table = dynamoDB.getTable(gameTable);
-            Item item = table.getItem("codigoGame", codigoGame);
 
-            if (item == null) {
+            // 🔍 Usamos SCAN + FilterExpression
+            ItemCollection<ScanOutcome> scanResult = table.scan(
+                    "codigoGame = :codigo",
+                    null,
+                    Map.of(":codigo", codigoGame)
+            );
+
+            Iterator<Item> iterator = scanResult.iterator();
+
+            if (!iterator.hasNext()) {
                 return createResponse(404, "Game no encontrado");
             }
+
+            Item item = iterator.next();
 
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(200)
@@ -69,7 +84,7 @@ public class GetGameByCodigoHandler implements RequestHandler<APIGatewayProxyReq
                     .withBody(item.toJSONPretty());
 
         } catch (Exception e) {
-            context.getLogger().log("Error: " + e.getMessage());
+            context.getLogger().log("❌ Error: " + e.getMessage());
             return createResponse(500, "Error interno");
         }
     }
