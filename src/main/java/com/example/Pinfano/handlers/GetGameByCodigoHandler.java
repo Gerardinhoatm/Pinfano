@@ -32,12 +32,23 @@ public class GetGameByCodigoHandler implements RequestHandler<APIGatewayProxyReq
         }
 
         try {
-            // Leemos el header X-CodigoGame
             Map<String, String> headers = event.getHeaders();
-            String codigoGame = headers != null ? headers.get("X-codigoGame") : null;
-            String username = headers != null ? headers.get("x-username") : null;
 
-            context.getLogger().log("📌 Header recibido - x-codigogame: " + codigoGame + ", x-username: " + username);
+            String codigoGame = null;
+            String username = null;
+
+            if (headers != null) {
+                for (String key : headers.keySet()) {
+                    if (key.equalsIgnoreCase("X-codigoGame")) {
+                        codigoGame = headers.get(key);
+                    }
+                    if (key.equalsIgnoreCase("X-username")) {
+                        username = headers.get(key);
+                    }
+                }
+            }
+
+            context.getLogger().log("📌 Header recibido - X-codigogame: " + codigoGame + ", X-username: " + username);
             if (codigoGame == null || codigoGame.isEmpty()) {
                 return createResponse(400, "Falta X-codigoGame en headers");
             }
