@@ -38,18 +38,17 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                     ));
         }
 
-        context.getLogger().log("JoinGame ejecutado");
-
         try {
 
             JsonNode body = objectMapper.readTree(request.getBody());
+
             String username = body.get("username").asText();
             String codigoGame = body.get("codigoGame").asText();
             int posicionSeleccionada = body.get("posicionSeleccionada").asInt();
 
             Table table = dynamoDB.getTable(gamesTable);
 
-            // 🔍 Buscar partida por codigoGame con SCAN
+            // 🔍 Buscar partida
             ScanSpec scanSpec = new ScanSpec()
                     .withFilterExpression("codigoGame = :cg")
                     .withValueMap(new ValueMap().withString(":cg", codigoGame));
@@ -69,6 +68,10 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             String idGame = gameItem.getString("idGame");
 
+            // ===============================
+            // ACTUALIZAR LISTAPLAYERS
+            // ===============================
+
             ArrayNode listaPlayersNode = (ArrayNode) objectMapper.readTree(
                     objectMapper.writeValueAsString(gameItem.getList("listaPlayers"))
             );
@@ -79,27 +82,76 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             listaPlayersNode.set(posicionSeleccionada - 1, objectMapper.valueToTree(username));
 
-            // === json ===
+            // ===============================
+            // ACTUALIZAR JSON
+            // ===============================
+
             String jsonStr = gameItem.getString("json");
             ObjectNode jsonNode = (ObjectNode) objectMapper.readTree(jsonStr);
 
             String jugadorKey = "jugador" + posicionSeleccionada;
             jsonNode.put(jugadorKey, username);
 
-            // === Update DynamoDB ===
+            // ===============================
+            // CALCULAR ESTADO
+            // ===============================
+
+            boolean hayVacio = false;
+
+            for (int i = 0; i < listaPlayersNode.size(); i++) {
+
+                String jugador = listaPlayersNode.get(i).asText();
+
+                if (jugador.equals("VACIO")) {
+                    hayVacio = true;
+                    break;
+                }
+            }
+
+            String estadoDB;
+            String estadoPartida;
+
+            if (hayVacio) {
+                estadoDB = "P";
+                estadoPartida = "pendiente";
+            } else {
+                estadoDB = "A";
+                estadoPartida = "lleno";
+            }
+
+            // ===============================
+            // ACTUALIZAR DYNAMODB
+            // ===============================
+
             UpdateItemSpec updateItemSpec = new UpdateItemSpec()
                     .withPrimaryKey("idGame", idGame)
-                    .withUpdateExpression("set listaPlayers = :lp, #js = :jsonVal")
+                    .withUpdateExpression("set listaPlayers = :lp, #js = :jsonVal, estado = :estadoVal")
                     .withNameMap(Map.of("#js", "json"))
                     .withValueMap(Map.of(
                             ":lp", objectMapper.convertValue(listaPlayersNode, java.util.List.class),
-                            ":jsonVal", jsonNode.toString()
+                            ":jsonVal", jsonNode.toString(),
+                            ":estadoVal", estadoDB
                     ))
                     .withReturnValues(ReturnValue.UPDATED_NEW);
 
             table.updateItem(updateItemSpec);
 
-            return createResponse(200, "Jugador agregado correctamente");
+            // ===============================
+            // RESPUESTA AL ACTIVITY
+            // ===============================
+
+            ObjectNode responseNode = objectMapper.createObjectNode();
+            responseNode.put("estadoPartida", estadoPartida);
+            responseNode.set("json", jsonNode);
+
+            return new APIGatewayProxyResponseEvent()
+                    .withStatusCode(200)
+                    .withHeaders(Map.of(
+                            "Content-Type", "application/json",
+                            "Access-Control-Allow-Origin", "*",
+                            "Access-Control-Allow-Headers", "*",
+                            "Access-Control-Allow-Methods", "OPTIONS,POST"))
+                    .withBody(responseNode.toString());
 
         } catch (Exception e) {
             context.getLogger().log("Error en JoinGameHandler: " + e.getMessage());
