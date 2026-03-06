@@ -4,6 +4,7 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.*;
 import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
+import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.ReturnValue;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -22,24 +23,25 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
     private final AmazonDynamoDB dynamoClient = AmazonDynamoDBClientBuilder.defaultClient();
     private final DynamoDB dynamoDB = new DynamoDB(dynamoClient);
     private final String gamesTable = System.getenv().getOrDefault("GAMES_TABLE", "PinfanoGames");
-    private final String codigoGameIndex = "codigoGame-index"; // GSI que debes crear en DynamoDB
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
 
-        // CORS
         if ("OPTIONS".equalsIgnoreCase(request.getHttpMethod())) {
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(200)
                     .withHeaders(Map.of(
                             "Access-Control-Allow-Origin", "*",
-                            "Access-Control-Allow-Methods", "POST, OPTIONS",
+                            "Access-Control-Allow-Methods", "POST,OPTIONS",
                             "Access-Control-Allow-Headers", "*"
                     ));
         }
 
+        context.getLogger().log("JoinGame ejecutado");
+
         try {
+
             JsonNode body = objectMapper.readTree(request.getBody());
             String username = body.get("username").asText();
             String codigoGame = body.get("codigoGame").asText();
@@ -47,38 +49,46 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             Table table = dynamoDB.getTable(gamesTable);
 
-            // 🔹 Buscar partida por codigoGame usando GSI
-            Index index = table.getIndex(codigoGameIndex);
-            ItemCollection<QueryOutcome> items = index.query("codigoGame", codigoGame);
+            // 🔍 Buscar partida por codigoGame con SCAN
+            ScanSpec scanSpec = new ScanSpec()
+                    .withFilterExpression("codigoGame = :cg")
+                    .withValueMap(new ValueMap().withString(":cg", codigoGame));
+
+            ItemCollection<ScanOutcome> items = table.scan(scanSpec);
 
             Item gameItem = null;
+
             for (Item item : items) {
-                gameItem = item; // Tomamos el primero (debería ser único)
+                gameItem = item;
                 break;
             }
 
             if (gameItem == null) {
-                return createResponse(404, "Partida no encontrada con codigoGame: " + codigoGame);
+                return createResponse(404, "Partida no encontrada");
             }
 
-            String idGame = gameItem.getString("idGame"); // clave primaria real
+            String idGame = gameItem.getString("idGame");
 
-            // === 1️⃣ Actualizar listaPlayers ===
-            ArrayNode listaPlayersNode = (ArrayNode) objectMapper.readTree(objectMapper.writeValueAsString(gameItem.getList("listaPlayers")));
+            // === listaPlayers ===
+            ArrayNode listaPlayersNode = (ArrayNode) objectMapper.readTree(
+                    objectMapper.writeValueAsString(gameItem.getList("listaPlayers"))
+            );
+
             if (posicionSeleccionada < 1 || posicionSeleccionada > listaPlayersNode.size()) {
-                return createResponse(400, "Posición inválida.");
+                return createResponse(400, "Posición inválida");
             }
 
             ObjectNode jugadorNode = (ObjectNode) listaPlayersNode.get(posicionSeleccionada - 1);
-            jugadorNode.put("S", username);
+            jugadorNode.put("username", username);
 
-            // === 2️⃣ Actualizar json ===
+            // === json ===
             String jsonStr = gameItem.getString("json");
             ObjectNode jsonNode = (ObjectNode) objectMapper.readTree(jsonStr);
+
             String jugadorKey = "jugador" + posicionSeleccionada;
             jsonNode.put(jugadorKey, username);
 
-            // === 3️⃣ Guardar cambios en DynamoDB usando idGame ===
+            // === Update DynamoDB ===
             UpdateItemSpec updateItemSpec = new UpdateItemSpec()
                     .withPrimaryKey("idGame", idGame)
                     .withUpdateExpression("set listaPlayers = :lp, #js = :jsonVal")
@@ -91,7 +101,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             table.updateItem(updateItemSpec);
 
-            return createResponse(200, "Jugador agregado correctamente.");
+            return createResponse(200, "Jugador agregado correctamente");
 
         } catch (Exception e) {
             context.getLogger().log("Error en JoinGameHandler: " + e.getMessage());
