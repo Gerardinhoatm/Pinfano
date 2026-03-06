@@ -55,7 +55,6 @@ public class GetGamePlayersHandler implements RequestHandler<APIGatewayProxyRequ
                     emptySlots.add(i);
                 }
             }
-
             Map<String, Object> response = new HashMap<>();
             response.put("exists", true);
             response.put("players", players);
