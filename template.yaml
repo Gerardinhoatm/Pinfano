@@ -376,23 +376,23 @@ Resources:
         Variables:
           GAMES_TABLE: PinfanoGames
   #Funcion para unirse a dicho game despues de validar
-  JoinGameFunction:
+  GetGamePlayersFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: PinfanoJoinGame
+      FunctionName: PinfanoGetGamePlayers
       Policies:
-        - DynamoDBCrudPolicy:
+        - DynamoDBReadPolicy:
             TableName: PinfanoGames
-      Handler: com.example.Pinfano.handlers.JoinGameHandler::handleRequest
+      Handler: com.example.Pinfano.handlers.GetGamePlayersHandler::handleRequest
       Runtime: java17
       MemorySize: 512
       Timeout: 10
       Events:
-        JoinGameApi:
+        GetGamePlayersApi:
           Type: Api
           Properties:
             RestApiId: !Ref PinfanoRestApi
-            Path: /joinGame
+            Path: /getGamePlayers
             Method: POST
       Environment:
         Variables:

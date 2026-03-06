@@ -14,7 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.*;
 
-public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
+public class GetGamePlayersHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
     private final AmazonDynamoDB dynamoClient = AmazonDynamoDBClientBuilder.defaultClient();
     private final DynamoDB dynamoDB = new DynamoDB(dynamoClient);
@@ -23,14 +23,14 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
+
         try {
+
             JsonNode body = objectMapper.readTree(request.getBody());
             String codigo = body.get("codigoGame").asText();
-            String username = body.get("username").asText();
 
             Table table = dynamoDB.getTable(gamesTable);
 
-            // Buscar partida por código
             ScanSpec scan = new ScanSpec()
                     .withFilterExpression("codigoGame = :v")
                     .withValueMap(new ValueMap().withString(":v", codigo));
@@ -38,57 +38,42 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             Iterator<Item> iterator = table.scan(scan).iterator();
 
             if (!iterator.hasNext()) {
-                return createResponse(200, "{\"joined\":false, \"reason\":\"NO_EXISTE\"}");
+                return createResponse(200, "{\"exists\":false}");
             }
 
             Item game = iterator.next();
-            String estado = game.getString("estado");
+
             List<Object> players = game.getList("listaPlayers");
 
-            boolean yaEsta = players.stream()
-                    .anyMatch(p -> p instanceof String && ((String) p).equalsIgnoreCase(username));
+            List<Integer> emptySlots = new ArrayList<>();
 
-            // Si ya está dentro → idempotente, joined=true
-            if (yaEsta) {
-                return createResponse(200, "{ \"joined\": true, \"estadoFinal\": \"" + estado + "\" }");
-            }
-
-            // Buscar primer "VACIO"
-            boolean insertado = false;
             for (int i = 0; i < players.size(); i++) {
+
                 Object p = players.get(i);
+
                 if (p instanceof String && p.equals("VACIO")) {
-                    players.set(i, username);
-                    insertado = true;
-                    break;
+                    emptySlots.add(i);
                 }
             }
 
-            if (!insertado) {
-                // No había hueco y usuario no estaba → error
-                return createResponse(200, "{\"joined\":false, \"reason\":\"SIN_HUECO\"}");
-            }
+            Map<String, Object> response = new HashMap<>();
+            response.put("exists", true);
+            response.put("players", players);
+            response.put("emptySlots", emptySlots);
 
-            // Revisar si quedan huecos para cambiar estado
-            boolean quedanHuecos = players.stream()
-                    .anyMatch(p -> p instanceof String && p.equals("VACIO"));
-            if (!quedanHuecos) {
-                estado = "A"; // activar partida
-            }
+            String jsonResponse = objectMapper.writeValueAsString(response);
 
-            // Guardar cambios en DynamoDB
-            game.withList("listaPlayers", players)
-                    .withString("estado", estado);
-            table.putItem(game);
-
-            return createResponse(200, "{ \"joined\": true, \"estadoFinal\": \"" + estado + "\" }");
+            return createResponse(200, jsonResponse);
 
         } catch (Exception e) {
-            return createResponse(200, "{\"joined\":false, \"reason\":\"ERROR_INTERNO: " + e.getMessage() + "\"}");
+
+            return createResponse(200,
+                    "{\"exists\":false, \"error\":\"" + e.getMessage() + "\"}");
         }
     }
 
     private APIGatewayProxyResponseEvent createResponse(int status, String body) {
+
         return new APIGatewayProxyResponseEvent()
                 .withStatusCode(status)
                 .withHeaders(Map.of(
