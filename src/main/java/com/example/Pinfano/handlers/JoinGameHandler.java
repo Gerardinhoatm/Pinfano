@@ -69,7 +69,6 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             String idGame = gameItem.getString("idGame");
 
-            // === listaPlayers ===
             ArrayNode listaPlayersNode = (ArrayNode) objectMapper.readTree(
                     objectMapper.writeValueAsString(gameItem.getList("listaPlayers"))
             );
@@ -78,8 +77,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return createResponse(400, "Posición inválida");
             }
 
-            ObjectNode jugadorNode = (ObjectNode) listaPlayersNode.get(posicionSeleccionada - 1);
-            jugadorNode.put("username", username);
+            listaPlayersNode.set(posicionSeleccionada - 1, objectMapper.valueToTree(username));
 
             // === json ===
             String jsonStr = gameItem.getString("json");
