@@ -405,6 +405,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: PinfanoGames
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoUsers
       Handler: com.example.Pinfano.handlers.JoinGameHandler::handleRequest
       Runtime: java17
       MemorySize: 512
