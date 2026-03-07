@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.util.List;
 import java.util.Map;
 
 public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
@@ -72,9 +73,13 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             // ACTUALIZAR LISTAPLAYERS
             // ===============================
 
-            ArrayNode listaPlayersNode = (ArrayNode) objectMapper.readTree(
-                    objectMapper.writeValueAsString(gameItem.getList("listaPlayers"))
-            );
+            List<String> listaPlayers = gameItem.getList("listaPlayers");
+
+            ArrayNode listaPlayersNode = objectMapper.createArrayNode();
+
+            for (String jugador : listaPlayers) {
+                listaPlayersNode.add(jugador);
+            }
 
             if (posicionSeleccionada < 1 || posicionSeleccionada > listaPlayersNode.size()) {
                 return createResponse(400, "Posición inválida");
@@ -90,7 +95,13 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             ObjectNode jsonNode = (ObjectNode) objectMapper.readTree(jsonStr);
 
             String jugadorKey = "jugador" + posicionSeleccionada;
-            jsonNode.put(jugadorKey, username);
+
+            // Si no existe, lo crea
+            if (!jsonNode.has(jugadorKey)) {
+                jsonNode.put(jugadorKey, username);
+            } else {
+                jsonNode.put(jugadorKey, username);
+            }
 
             // ===============================
             // CALCULAR ESTADO
