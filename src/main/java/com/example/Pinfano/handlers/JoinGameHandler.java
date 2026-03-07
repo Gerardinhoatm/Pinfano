@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.example.Pinfano.handlers.AddGameToUserHandler;
 
 import java.util.List;
 import java.util.Map;
@@ -101,12 +102,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             String jugadorKey = "jugador" + posicionSeleccionada;
 
-            // Si no existe, lo crea
-            if (!jsonNode.has(jugadorKey)) {
-                jsonNode.put(jugadorKey, username);
-            } else {
-                jsonNode.put(jugadorKey, username);
-            }
+            jsonNode.put(jugadorKey, username);
 
             // ===============================
             // CALCULAR ESTADO
@@ -151,6 +147,23 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                     .withReturnValues(ReturnValue.UPDATED_NEW);
 
             table.updateItem(updateItemSpec);
+
+            // ===============================
+            // AÑADIR PARTIDA AL USUARIO
+            // ===============================
+
+            ObjectNode addGameBody = objectMapper.createObjectNode();
+            addGameBody.put("username", username);
+            addGameBody.put("codigoGame", codigoGame);
+
+            // Simulamos una petición HTTP para el otro handler
+            APIGatewayProxyRequestEvent addGameRequest = new APIGatewayProxyRequestEvent();
+            addGameRequest.setHttpMethod("POST");
+            addGameRequest.setBody(addGameBody.toString());
+
+            // Ejecutar el handler
+            AddGameToUserHandler addGameHandler = new AddGameToUserHandler();
+            addGameHandler.handleRequest(addGameRequest, context);
 
             // ===============================
             // RESPUESTA AL ACTIVITY
