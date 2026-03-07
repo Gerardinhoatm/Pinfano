@@ -69,11 +69,16 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             String idGame = gameItem.getString("idGame");
 
+
             // ===============================
             // ACTUALIZAR LISTAPLAYERS
             // ===============================
 
             List<String> listaPlayers = gameItem.getList("listaPlayers");
+
+            context.getLogger().log("USERNAME: " + username);
+            context.getLogger().log("POSICION: " + posicionSeleccionada);
+            context.getLogger().log("LISTA ANTES: " + listaPlayers);
 
             ArrayNode listaPlayersNode = objectMapper.createArrayNode();
 
