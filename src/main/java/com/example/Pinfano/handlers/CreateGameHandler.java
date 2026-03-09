@@ -67,7 +67,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
                 // Simular petición a ReadTilesHandler
                 APIGatewayV2HTTPEvent readEvent = new APIGatewayV2HTTPEvent();
-                readEvent.setBody("{}"); // no necesitamos body para leer fichero
+                readEvent.setBody("{}");
                 ReadTilesHandler readHandler = new ReadTilesHandler();
                 APIGatewayV2HTTPResponse readResponse = readHandler.handleRequest(readEvent, context);
 
@@ -83,8 +83,10 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     String key = "jugador" + (i + 1);
                     jsonGame.put(key, jugadores.get(i));
                 }
-
+                jsonGame.put("puntos", puntos);
                 jsonGame.put("username", username);
+                jsonGame.put("estado", numJugadores == 1 ? "A" : "P");
+                jsonGame.put("terminado", false);
 
             } else if (letra.equalsIgnoreCase("g")) {
                 context.getLogger().log(">>> [CreateGame] Letra G → generando json a boleo\n");
@@ -96,7 +98,6 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 List<String> listaFichas = new ArrayList<>(todasFichas.values());
                 Collections.shuffle(listaFichas);
 
-                // Repartir fichas entre jugadores (7 por jugador)
                 Map<String, List<String>> manoJugadores = new HashMap<>();
                 int turno = 1;
                 String jugadorCon66 = username;
@@ -111,7 +112,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     for (int k = 0; k < 7 && !listaFichas.isEmpty(); k++) {
                         String ficha = listaFichas.remove(0);
                         mano.add(ficha);
-                        if (ficha.equals("seisseis")) { // {6,6} → turno inicial
+                        if (ficha.equals("seisseis")) { // {6,6}
                             turno = i + 1;
                             jugadorCon66 = j;
                         }
@@ -157,8 +158,10 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     .withPrimaryKey("idGame", idGame)
                     .withString("codigoGame", codigoGame)
                     .withMap("json", objectMapper.convertValue(jsonGame, Map.class))
-                    .withString("estado", "ESPERANDO")
+                    .withString("estado", jsonGame.get("estado").asText())
                     .withNumber("numJugadores", numJugadores)
+                    .withNumber("puntos", puntos)
+                    .withBoolean("terminado", false)
                     .withList("listaPlayers", jugadores);
 
             context.getLogger().log(">>> [CreateGame] Guardando partida en DynamoDB...\n");
@@ -272,5 +275,4 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             return "(" + left + "," + right + ")";
         }
     }
-
 }
