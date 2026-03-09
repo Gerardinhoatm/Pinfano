@@ -14,7 +14,9 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.example.Pinfano.handlers.AddGameToUserHandler;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +30,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
 
+        // CORS preflight
         if ("OPTIONS".equalsIgnoreCase(request.getHttpMethod())) {
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(200)
@@ -39,20 +42,18 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
         }
 
         try {
-
+            // Parsear cuerpo
             JsonNode body = objectMapper.readTree(request.getBody());
-
             String username = body.get("username").asText();
             String codigoGame = body.get("codigoGame").asText();
             int posicionSeleccionada = body.get("posicionSeleccionada").asInt();
 
             Table table = dynamoDB.getTable(gamesTable);
 
-            // 🔍 Buscar partida
+            // 🔍 Buscar partida por codigoGame
             ScanSpec scanSpec = new ScanSpec()
                     .withFilterExpression("codigoGame = :cg")
                     .withValueMap(new ValueMap().withString(":cg", codigoGame));
-
             ItemCollection<ScanOutcome> items = table.scan(scanSpec);
 
             Item gameItem = null;
@@ -68,7 +69,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             String idGame = gameItem.getString("idGame");
 
             // ===============================
-            // ACTUALIZAR LISTAPLAYERS
+            // ACTUALIZAR LISTA PLAYERS
             // ===============================
 
             List<String> listaPlayers = gameItem.getList("listaPlayers");
@@ -81,11 +82,17 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return createResponse(400, "Posición inválida");
             }
 
-            // Actualizar posición en la lista
+            // Actualizar la posición
             listaPlayers.set(posicionSeleccionada - 1, username);
 
+            // ✅ Convertir a lista de Strings plana (para evitar LinkedHashMap)
+            List<String> listaPlayersString = new ArrayList<>();
+            for (String jugador : listaPlayers) {
+                listaPlayersString.add(jugador);
+            }
+
             // ===============================
-            // ACTUALIZAR JSON
+            // ACTUALIZAR JSON DE JUGADORES
             // ===============================
 
             String jsonStr = gameItem.getString("json");
@@ -94,11 +101,10 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             jsonNode.put(jugadorKey, username);
 
             // ===============================
-            // CALCULAR ESTADO
+            // CALCULAR ESTADO DE LA PARTIDA
             // ===============================
 
-            boolean hayVacio = listaPlayers.contains("VACIO");
-
+            boolean hayVacio = listaPlayersString.contains("VACIO");
             String estadoDB = hayVacio ? "P" : "A";
             String estadoPartida = hayVacio ? "pendiente" : "lleno";
 
@@ -111,7 +117,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                     .withUpdateExpression("set listaPlayers = :lp, #js = :jsonVal, estado = :estadoVal")
                     .withNameMap(Map.of("#js", "json"))
                     .withValueMap(Map.of(
-                            ":lp", listaPlayers,
+                            ":lp", listaPlayersString,      // ✅ Lista plana de Strings
                             ":jsonVal", jsonNode.toString(),
                             ":estadoVal", estadoDB
                     ))
