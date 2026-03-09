@@ -13,9 +13,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.example.Pinfano.handlers.AddGameToUserHandler;
 
 import java.util.List;
 import java.util.Map;
@@ -58,7 +56,6 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             ItemCollection<ScanOutcome> items = table.scan(scanSpec);
 
             Item gameItem = null;
-
             for (Item item : items) {
                 gameItem = item;
                 break;
@@ -70,28 +67,22 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             String idGame = gameItem.getString("idGame");
 
-
             // ===============================
             // ACTUALIZAR LISTAPLAYERS
             // ===============================
 
             List<String> listaPlayers = gameItem.getList("listaPlayers");
-
             context.getLogger().log("USERNAME: " + username);
             context.getLogger().log("POSICION: " + posicionSeleccionada);
             context.getLogger().log("LISTA ANTES: " + listaPlayers);
 
-            ArrayNode listaPlayersNode = objectMapper.createArrayNode();
-
-            for (String jugador : listaPlayers) {
-                listaPlayersNode.add(jugador);
-            }
-
-            if (posicionSeleccionada < 1 || posicionSeleccionada > listaPlayersNode.size()) {
+            // Validar posición
+            if (posicionSeleccionada < 1 || posicionSeleccionada > listaPlayers.size()) {
                 return createResponse(400, "Posición inválida");
             }
 
-            listaPlayersNode.set(posicionSeleccionada - 1, objectMapper.valueToTree(username));
+            // Actualizar posición en la lista
+            listaPlayers.set(posicionSeleccionada - 1, username);
 
             // ===============================
             // ACTUALIZAR JSON
@@ -99,37 +90,17 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
             String jsonStr = gameItem.getString("json");
             ObjectNode jsonNode = (ObjectNode) objectMapper.readTree(jsonStr);
-
             String jugadorKey = "jugador" + posicionSeleccionada;
-
             jsonNode.put(jugadorKey, username);
 
             // ===============================
             // CALCULAR ESTADO
             // ===============================
 
-            boolean hayVacio = false;
+            boolean hayVacio = listaPlayers.contains("VACIO");
 
-            for (int i = 0; i < listaPlayersNode.size(); i++) {
-
-                String jugador = listaPlayersNode.get(i).asText();
-
-                if (jugador.equals("VACIO")) {
-                    hayVacio = true;
-                    break;
-                }
-            }
-
-            String estadoDB;
-            String estadoPartida;
-
-            if (hayVacio) {
-                estadoDB = "P";
-                estadoPartida = "pendiente";
-            } else {
-                estadoDB = "A";
-                estadoPartida = "lleno";
-            }
+            String estadoDB = hayVacio ? "P" : "A";
+            String estadoPartida = hayVacio ? "pendiente" : "lleno";
 
             // ===============================
             // ACTUALIZAR DYNAMODB
@@ -140,7 +111,7 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                     .withUpdateExpression("set listaPlayers = :lp, #js = :jsonVal, estado = :estadoVal")
                     .withNameMap(Map.of("#js", "json"))
                     .withValueMap(Map.of(
-                            ":lp", objectMapper.convertValue(listaPlayersNode, java.util.List.class),
+                            ":lp", listaPlayers,
                             ":jsonVal", jsonNode.toString(),
                             ":estadoVal", estadoDB
                     ))
@@ -156,12 +127,10 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             addGameBody.put("username", username);
             addGameBody.put("codigoGame", codigoGame);
 
-            // Simulamos una petición HTTP para el otro handler
             APIGatewayProxyRequestEvent addGameRequest = new APIGatewayProxyRequestEvent();
             addGameRequest.setHttpMethod("POST");
             addGameRequest.setBody(addGameBody.toString());
 
-            // Ejecutar el handler
             AddGameToUserHandler addGameHandler = new AddGameToUserHandler();
             addGameHandler.handleRequest(addGameRequest, context);
 
