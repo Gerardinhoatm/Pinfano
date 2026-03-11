@@ -67,14 +67,12 @@ public class ContinueGameHandler implements RequestHandler<APIGatewayProxyReques
 
             // Identificar qué jugador soy yo
             int playerIndex = -1;
-
             for (int i = 0; i < players.size(); i++) {
                 Object p = players.get(i);
                 context.getLogger().log("[CONTINUE] Revisando jugador[" + i + "]: " + p + "\n");
-
                 if (p instanceof String && p.equals(username)) {
                     playerIndex = i;
-                    context.getLogger().log("[CONTINUE] MATCH → El jugador es playerIndex=" + i + "\n");
+                    context.getLogger().log("[CONTINUE] MATCH → El jugador es índice de array: " + i + "\n");
                     break;
                 }
             }
@@ -85,16 +83,21 @@ public class ContinueGameHandler implements RequestHandler<APIGatewayProxyReques
                         "{\"success\":false, \"reason\":\"El jugador no está en esta partida\"}");
             }
 
-            // --- Sacar turno ---
-            int turno = game.getInt("turno");
+            // --- Sacar turno desde json interno ---
+            Map<String, Object> jsonData = game.getMap("json");
+            int turno = ((Number) jsonData.get("turno")).intValue();
             context.getLogger().log("[CONTINUE] Turno actual de la partida: " + turno + "\n");
+
+            // --- Convertir playerIndex a 1-based para tu lógica de juego ---
+            int playerNumber = playerIndex + 1;
+            context.getLogger().log("[CONTINUE] playerNumber (1-4): " + playerNumber + "\n");
 
             // --- Respuesta final ---
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("codigoGame", codigoGame);
             response.put("jsonGame", objectMapper.readValue(jsonGame, Map.class));
-            response.put("playerIndex", playerIndex);
+            response.put("playerIndex", playerNumber); // ahora va de 1 a 4
             response.put("turno", turno);
 
             String jsonResponse = objectMapper.writeValueAsString(response);
