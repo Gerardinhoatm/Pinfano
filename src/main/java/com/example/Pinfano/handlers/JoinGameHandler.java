@@ -121,8 +121,25 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             // ------------------------------
             // Normalizar el JSON interno
             // ------------------------------
-            String jsonStr = gameItem.getString("json");
-            ObjectNode jsonNode = (ObjectNode) objectMapper.readTree(jsonStr);
+            Object jsonAttr = gameItem.get("json");
+            ObjectNode jsonNode;
+
+            // Si DynamoDB devolvió string
+            if (jsonAttr instanceof String) {
+                jsonNode = (ObjectNode) objectMapper.readTree((String) jsonAttr);
+
+            // Si DynamoDB devolvió mapa (LinkedHashMap)
+            } else if (jsonAttr instanceof Map) {
+                // Convertimos el map a JSON
+                String jsonStr = objectMapper.writeValueAsString(jsonAttr);
+                jsonNode = (ObjectNode) objectMapper.readTree(jsonStr);
+
+            // Cualquier otra cosa → error controlado
+            } else {
+                throw new RuntimeException("Formato inesperado para campo 'json'");
+            }
+
+            // Normalizar
             jsonNode = normalizeJson(jsonNode);
 
             context.getLogger().log("JSON NORMALIZADO: " + jsonNode.toString());
