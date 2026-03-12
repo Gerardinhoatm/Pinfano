@@ -15,7 +15,7 @@ import java.util.Map;
 public class ConnectHandler implements RequestHandler<APIGatewayV2WebSocketEvent, Object> {
 
     private final AmazonDynamoDB dynamoDb = AmazonDynamoDBClientBuilder.defaultClient();
-    private final String TABLE_NAME = System.getenv().getOrDefault("CONNECTIONS_TABLE", "PinfanoConnections");
+    private final String TABLE_NAME = "PinfanoConnections";
 
     @Override
     public Object handleRequest(APIGatewayV2WebSocketEvent event, Context context) {
@@ -23,18 +23,25 @@ public class ConnectHandler implements RequestHandler<APIGatewayV2WebSocketEvent
         String connectionId = event.getRequestContext().getConnectionId();
         Map<String, String> headers = event.getHeaders() != null ? event.getHeaders() : new HashMap<>();
 
-        // Valores enviados desde Android Studio
-        String username = headers.getOrDefault("X-Username", "unknown");
-        String codigoPartida = headers.get("X-Codigo");
+        // ✔ Headers correctos
+        String username = headers.get("X-Username");
+        String codigoGame = headers.get("X-Codigo");
 
-        // Guardar en DynamoDB
+        context.getLogger().log("🔌 CONECT → connectionId=" + connectionId +
+                " | username=" + username +
+                " | game=" + codigoGame);
+
+        // ❌ Si es null, NO guardamos una conexión basura
+        if (username == null || codigoGame == null) {
+            context.getLogger().log("❌ Headers vacíos, no se guarda nada.");
+            return null;
+        }
+
+        // ✔ Guardar conexión correcta
         Map<String, AttributeValue> item = new HashMap<>();
         item.put("connectionId", new AttributeValue(connectionId));
         item.put("username", new AttributeValue(username));
-        item.put("codigoPartida", new AttributeValue(codigoPartida));
-
-        // Estado de usuario
-        item.put("connected", new AttributeValue().withBOOL(true));
+        item.put("codigoGame", new AttributeValue(codigoGame)); // ← IMPORTANTE: ESTE CAMPO
 
         PutItemRequest request = new PutItemRequest()
                 .withTableName(TABLE_NAME)
@@ -47,9 +54,6 @@ public class ConnectHandler implements RequestHandler<APIGatewayV2WebSocketEvent
             context.getLogger().log("❌ Error guardando conexión: " + e.getMessage());
         }
 
-        return Map.of(
-                "statusCode", 200,
-                "body", "Connected!"
-        );
+        return Map.of("statusCode", 200, "body", "Connected!");
     }
 }
