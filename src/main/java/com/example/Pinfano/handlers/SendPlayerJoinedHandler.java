@@ -12,8 +12,6 @@ import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.dynamodbv2.document.Index;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
 import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
-import com.amazonaws.services.dynamodbv2.model.DeleteItemRequest;
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 
 import com.amazonaws.services.apigatewaymanagementapi.AmazonApiGatewayManagementApi;
 import com.amazonaws.services.apigatewaymanagementapi.AmazonApiGatewayManagementApiClientBuilder;
@@ -22,12 +20,10 @@ import com.amazonaws.services.apigatewaymanagementapi.model.PostToConnectionRequ
 import org.json.JSONObject;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DisconnectHandler implements RequestHandler<APIGatewayV2WebSocketEvent, Object> {
+public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSocketEvent, Object> {
 
     private final AmazonDynamoDB dynamoDb = AmazonDynamoDBClientBuilder.defaultClient();
     private final DynamoDB dynamo = new DynamoDB(dynamoDb);
@@ -39,39 +35,36 @@ public class DisconnectHandler implements RequestHandler<APIGatewayV2WebSocketEv
     public Object handleRequest(APIGatewayV2WebSocketEvent event, Context context) {
 
         String connectionId = event.getRequestContext().getConnectionId();
-        context.getLogger().log("❌ Desconectando connectionId: " + connectionId);
+        context.getLogger().log("🔗 Player joined: " + connectionId);
+
+        String body = event.getBody();
+        String username = "";
+        String codigoGame = "";
+
+        try {
+            JSONObject json = new JSONObject(body);
+            username = json.getString("username");
+            codigoGame = json.getString("codigoGame");
+        } catch (Exception e) {
+            context.getLogger().log("❌ Error parsing JSON: " + e.getMessage());
+        }
 
         Table connectionsTable = dynamo.getTable(CONNECTIONS_TABLE);
         Table gamesTable = dynamo.getTable(GAMES_TABLE);
 
-        // 1️⃣ Obtener el item del jugador que se desconecta
-        Item playerItem = connectionsTable.getItem("connectionId", connectionId);
-        if (playerItem == null) {
-            context.getLogger().log("❌ ConnectionId no encontrado en DynamoDB");
-            return Map.of("statusCode", 200, "body", "Disconnected");
-        }
-
-        String username = playerItem.getString("username");
-        String codigoGame = playerItem.getString("codigoGame");
-
-        // 2️⃣ Obtener info del game para maxPlayers
-        Item gameItem = gamesTable.getItem("codigoGame", codigoGame);
-        int maxPlayers = 4;
-        if (gameItem != null && gameItem.isPresent("numjugadores")) {
-            maxPlayers = gameItem.getInt("numjugadores");
-        }
-
-        // 3️⃣ Eliminar la conexión de DynamoDB
-        Map<String, AttributeValue> key = new HashMap<>();
-        key.put("connectionId", new AttributeValue(connectionId));
+        // Guardar la conexión en DynamoDB
         try {
-            dynamoDb.deleteItem(new DeleteItemRequest().withTableName(CONNECTIONS_TABLE).withKey(key));
-            context.getLogger().log("✅ Conexión eliminada de DynamoDB");
+            Item item = new Item()
+                    .withPrimaryKey("connectionId", connectionId)
+                    .withString("username", username)
+                    .withString("codigoGame", codigoGame);
+            connectionsTable.putItem(item);
+            context.getLogger().log("✅ Connection saved in DynamoDB");
         } catch (Exception e) {
-            context.getLogger().log("❌ Error eliminando conexión: " + e.getMessage());
+            context.getLogger().log("❌ Error saving connection: " + e.getMessage());
         }
 
-        // 4️⃣ Obtener todas las conexiones restantes de este mismo game
+        // Obtener todas las conexiones del mismo juego
         Index index = connectionsTable.getIndex("CodigoGame-index");
         ItemCollection<QueryOutcome> items = index.query("codigoGame", codigoGame);
 
@@ -82,40 +75,43 @@ public class DisconnectHandler implements RequestHandler<APIGatewayV2WebSocketEv
             connectedPlayers++;
         }
 
-        // 5️⃣ Crear JSON playerLeft y enviar a todos
-        try {
-            JSONObject json = new JSONObject();
-            json.put("type", "playerLeft");
-            json.put("username", username);
-            json.put("connectedPlayers", connectedPlayers);
-            json.put("maxPlayers", maxPlayers);
+        // Obtener maxPlayers del juego
+        int maxPlayers = 4;
+        Item gameItem = gamesTable.getItem("codigoGame", codigoGame);
+        if (gameItem != null && gameItem.isPresent("numjugadores")) {
+            maxPlayers = gameItem.getInt("numjugadores");
+        }
 
-            // Cliente API Gateway Management
+        // Crear JSON y notificar a todos
+        try {
+            JSONObject msgJson = new JSONObject();
+            msgJson.put("type", "playerJoined");
+            msgJson.put("username", username);
+            msgJson.put("connectedPlayers", connectedPlayers);
+            msgJson.put("maxPlayers", maxPlayers);
+
             AmazonApiGatewayManagementApi apiGatewayClient = AmazonApiGatewayManagementApiClientBuilder.standard()
                     .withEndpointConfiguration(
                             new AmazonApiGatewayManagementApiClientBuilder.EndpointConfiguration(
                                     "https://" + event.getRequestContext().getDomainName() + "/" + event.getRequestContext().getStage(),
-                                    "eu-central-1" // Cambia si tu región es otra
+                                    "eu-central-1"
                             )
                     ).build();
 
-            for (String targetConnectionId : targetConnections) {
+            for (String target : targetConnections) {
                 try {
                     PostToConnectionRequest request = new PostToConnectionRequest()
-                            .withConnectionId(targetConnectionId)
-                            .withData(ByteBuffer.wrap(json.toString().getBytes()));
+                            .withConnectionId(target)
+                            .withData(ByteBuffer.wrap(msgJson.toString().getBytes()));
                     apiGatewayClient.postToConnection(request);
                 } catch (Exception e) {
-                    context.getLogger().log("❌ Error enviando mensaje a " + targetConnectionId + ": " + e.getMessage());
+                    context.getLogger().log("❌ Error sending to " + target + ": " + e.getMessage());
                 }
             }
-
-            context.getLogger().log("✅ Notificado a todos los jugadores que se fue " + username);
-
         } catch (Exception e) {
-            context.getLogger().log("❌ Error creando JSON playerLeft: " + e.getMessage());
+            context.getLogger().log("❌ Error creating JSON: " + e.getMessage());
         }
 
-        return Map.of("statusCode", 200, "body", "Disconnected");
+        return null;
     }
 }
