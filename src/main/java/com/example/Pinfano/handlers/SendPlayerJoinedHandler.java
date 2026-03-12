@@ -76,17 +76,25 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
                 }
             }
         } catch (Exception e) {
-            context.getLogger().log("❌ Error scanning table: " + e.getMessage());
+            context.getLogger().log("❌ Error scanning connections table: " + e.getMessage());
         }
 
-        // Obtener maxPlayers del juego
-        int maxPlayers = 4;
-        Item gameItem = gamesTable.getItem("codigoGame", codigoGame);
-        if (gameItem != null && gameItem.isPresent("numjugadores")) {
-            maxPlayers = gameItem.getInt("numjugadores");
+        // ----------------------
+        // TEMPORAL: Obtener numjugadores del juego usando scan
+        int maxPlayers = 4; // valor por defecto
+        try {
+            ItemCollection<?> allGames = gamesTable.scan(); // escanea toda la tabla
+            for (Item g : allGames) {
+                if (codigoGame.equals(g.getString("codigoGame")) && g.isPresent("numjugadores")) {
+                    maxPlayers = g.getInt("numjugadores");
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            context.getLogger().log("❌ Error scanning games table: " + e.getMessage());
         }
 
-        // Crear JSON y notificar a todos
+        // Crear JSON y notificar a todos los jugadores
         try {
             JSONObject msgJson = new JSONObject();
             msgJson.put("type", "playerJoined");
