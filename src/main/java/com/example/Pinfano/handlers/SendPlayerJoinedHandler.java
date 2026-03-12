@@ -9,9 +9,7 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Item;
 import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.document.Index;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
-import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
 
 import com.amazonaws.services.apigatewaymanagementapi.AmazonApiGatewayManagementApi;
 import com.amazonaws.services.apigatewaymanagementapi.AmazonApiGatewayManagementApiClientBuilder;
@@ -64,15 +62,21 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
             context.getLogger().log("❌ Error saving connection: " + e.getMessage());
         }
 
-        // Obtener todas las conexiones del mismo juego
-        Index index = connectionsTable.getIndex("CodigoGame-index");
-        ItemCollection<QueryOutcome> items = index.query("codigoGame", codigoGame);
-
+        // ----------------------
+        // TEMPORAL: Obtener conexiones del mismo juego SIN índice
         List<String> targetConnections = new ArrayList<>();
         int connectedPlayers = 0;
-        for (Item item : items) {
-            targetConnections.add(item.getString("connectionId"));
-            connectedPlayers++;
+
+        try {
+            ItemCollection<?> allItems = connectionsTable.scan(); // escanea toda la tabla
+            for (Item item : allItems) {
+                if (codigoGame.equals(item.getString("codigoGame"))) {
+                    targetConnections.add(item.getString("connectionId"));
+                    connectedPlayers++;
+                }
+            }
+        } catch (Exception e) {
+            context.getLogger().log("❌ Error scanning table: " + e.getMessage());
         }
 
         // Obtener maxPlayers del juego
