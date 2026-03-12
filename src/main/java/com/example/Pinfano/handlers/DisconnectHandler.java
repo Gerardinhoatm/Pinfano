@@ -70,7 +70,14 @@ public class DisconnectHandler implements RequestHandler<APIGatewayV2WebSocketEv
         int connectedPlayers = 0;
 
         for (Item i : index.query(spec)) {
-            targets.add(i.getString("connectionId"));
+            String cid = i.getString("connectionId");
+
+            if (cid.equals(connectionId)) {
+                context.getLogger().log("⚠ GSI retrasado: se ignora connectionId ya eliminado");
+                continue;
+            }
+
+            targets.add(cid);
             connectedPlayers++;
         }
 
