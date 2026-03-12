@@ -10,6 +10,7 @@ import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Item;
 import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
+import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
 
 import com.amazonaws.services.apigatewaymanagementapi.AmazonApiGatewayManagementApi;
 import com.amazonaws.services.apigatewaymanagementapi.AmazonApiGatewayManagementApiClientBuilder;
@@ -63,37 +64,45 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
         }
 
         // ----------------------
-        // TEMPORAL: Obtener conexiones del mismo juego SIN índice
+        // Obtener conexiones del mismo juego usando ConsistentRead
         List<String> targetConnections = new ArrayList<>();
         int connectedPlayers = 0;
 
         try {
-            ItemCollection<?> allItems = connectionsTable.scan(); // escanea toda la tabla
+            ScanSpec scanSpec = new ScanSpec().withConsistentRead(true);
+            ItemCollection<?> allItems = connectionsTable.scan(scanSpec);
+
             for (Item item : allItems) {
-                if (codigoGame.equals(item.getString("codigoGame"))) {
+                String gameCode = item.getString("codigoGame");
+                if (codigoGame.equals(gameCode)) {
                     targetConnections.add(item.getString("connectionId"));
                     connectedPlayers++;
                 }
             }
+
         } catch (Exception e) {
             context.getLogger().log("❌ Error scanning connections table: " + e.getMessage());
         }
 
         // ----------------------
-        // TEMPORAL: Obtener numjugadores del juego usando scan
+        // Obtener numjugadores del juego usando scan consistente
         int maxPlayers = 4; // valor por defecto
         try {
-            ItemCollection<?> allGames = gamesTable.scan(); // escanea toda la tabla
+            ScanSpec scanSpec = new ScanSpec().withConsistentRead(true);
+            ItemCollection<?> allGames = gamesTable.scan(scanSpec);
+
             for (Item g : allGames) {
                 if (codigoGame.equals(g.getString("codigoGame")) && g.isPresent("numjugadores")) {
                     maxPlayers = g.getInt("numjugadores");
                     break;
                 }
             }
+
         } catch (Exception e) {
             context.getLogger().log("❌ Error scanning games table: " + e.getMessage());
         }
 
+        // ----------------------
         // Crear JSON y notificar a todos los jugadores
         try {
             JSONObject msgJson = new JSONObject();
@@ -120,6 +129,7 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
                     context.getLogger().log("❌ Error sending to " + target + ": " + e.getMessage());
                 }
             }
+
         } catch (Exception e) {
             context.getLogger().log("❌ Error creating JSON: " + e.getMessage());
         }
