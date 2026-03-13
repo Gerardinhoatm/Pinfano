@@ -84,7 +84,8 @@ public class ContinueGameHandler implements RequestHandler<APIGatewayProxyReques
             }
 
             // --- Sacar turno desde json interno ---
-            Map<String, Object> jsonData = game.getMap("json");
+            String jsonStr = game.getString("json");
+            Map<String, Object> jsonData = objectMapper.readValue(jsonStr, Map.class);
             int turno = ((Number) jsonData.get("turno")).intValue();
             context.getLogger().log("[CONTINUE] Turno actual de la partida: " + turno + "\n");
 
@@ -97,7 +98,7 @@ public class ContinueGameHandler implements RequestHandler<APIGatewayProxyReques
             response.put("success", true);
             response.put("codigoGame", codigoGame);
             response.put("jsonGame", objectMapper.readValue(jsonGame, Map.class));
-            response.put("playerIndex", playerNumber); // ahora va de 1 a 4
+            response.put("playerIndex", playerNumber);
             response.put("turno", turno);
 
             String jsonResponse = objectMapper.writeValueAsString(response);
