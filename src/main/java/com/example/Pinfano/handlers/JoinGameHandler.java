@@ -3,8 +3,8 @@ package com.example.Pinfano.handlers;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.*;
-import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
 import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
+import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.ReturnValue;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -13,8 +13,12 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.*;
 
 public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
@@ -22,8 +26,9 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
     private final AmazonDynamoDB dynamoClient = AmazonDynamoDBClientBuilder.defaultClient();
     private final DynamoDB dynamoDB = new DynamoDB(dynamoClient);
     private final String gamesTable = System.getenv().getOrDefault("GAMES_TABLE", "PinfanoGames");
+    private final String addGameUserAPI = System.getenv().getOrDefault("ADD_GAME_USER_API",
+            "https://8806xqh414.execute-api.eu-central-1.amazonaws.com/Prod/addGameToUser");
     private final ObjectMapper objectMapper = new ObjectMapper();
-
 
     // ------------------------------
     // Normalizar JSON interno
@@ -45,7 +50,6 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
 
         return fixed;
     }
-
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
@@ -73,11 +77,9 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             Table table = dynamoDB.getTable(gamesTable);
 
             // Buscar partida por códigoGame
-            ScanSpec scanSpec = new ScanSpec()
+            ItemCollection<ScanOutcome> items = table.scan(new ScanSpec()
                     .withFilterExpression("codigoGame = :cg")
-                    .withValueMap(new ValueMap().withString(":cg", codigoGame));
-
-            ItemCollection<ScanOutcome> items = table.scan(scanSpec);
+                    .withValueMap(new ValueMap().withString(":cg", codigoGame)));
 
             Item gameItem = null;
             for (Item item : items) {
@@ -96,7 +98,6 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
             // ------------------------------
             List<Object> rawList = gameItem.getList("listaPlayers");
             List<String> listaPlayers = new ArrayList<>();
-
             for (Object o : rawList) {
                 if (o instanceof String) {
                     listaPlayers.add((String) o);
@@ -112,46 +113,40 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                 return response(400, "Posición inválida");
             }
 
-            // Insertar username directamente
+            // Insertar username en listaPlayers
             listaPlayers.set(posicion - 1, username);
 
-            // Crear lista limpia para DynamoDB
-            List<String> listaPlayersClean = new ArrayList<>(listaPlayers);
-
             // ------------------------------
-            // Normalizar el JSON interno
+            // Normalizar JSON interno
             // ------------------------------
             Object jsonAttr = gameItem.get("json");
             ObjectNode jsonNode;
-
-            // Si DynamoDB devolvió string
             if (jsonAttr instanceof String) {
                 jsonNode = (ObjectNode) objectMapper.readTree((String) jsonAttr);
-
-            // Si DynamoDB devolvió mapa (LinkedHashMap)
             } else if (jsonAttr instanceof Map) {
-                // Convertimos el map a JSON
                 String jsonStr = objectMapper.writeValueAsString(jsonAttr);
                 jsonNode = (ObjectNode) objectMapper.readTree(jsonStr);
-
-            // Cualquier otra cosa → error controlado
             } else {
                 throw new RuntimeException("Formato inesperado para campo 'json'");
             }
 
-            // Normalizar
             jsonNode = normalizeJson(jsonNode);
-
-            context.getLogger().log("JSON NORMALIZADO: " + jsonNode.toString());
 
             // Actualizar jugador en JSON
             String jugadorKey = "jugador" + posicion;
             jsonNode.put(jugadorKey, username);
 
+            // Actualizar listaPlayers también dentro del JSON
+            ArrayNode listaPlayersJson = objectMapper.createArrayNode();
+            for (String s : listaPlayers) {
+                listaPlayersJson.add(s);
+            }
+            jsonNode.set("listaPlayers", listaPlayersJson);
+
             // ------------------------------
             // Estado de partida
             // ------------------------------
-            boolean hayVacio = listaPlayersClean.contains("VACIO");
+            boolean hayVacio = listaPlayers.contains("VACIO");
             String estadoDB = hayVacio ? "P" : "A";
             String estadoPartida = hayVacio ? "pendiente" : "lleno";
 
@@ -163,13 +158,39 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                     .withUpdateExpression("set listaPlayers = :lp, #js = :jsonVal, estado = :estadoVal")
                     .withNameMap(Map.of("#js", "json"))
                     .withValueMap(Map.of(
-                            ":lp", listaPlayersClean,
+                            ":lp", listaPlayers,
                             ":jsonVal", jsonNode.toString(),
                             ":estadoVal", estadoDB
                     ))
                     .withReturnValues(ReturnValue.UPDATED_NEW);
 
             table.updateItem(updateItemSpec);
+
+            // ------------------------------
+            // Añadir juego al usuario
+            // ------------------------------
+            try {
+                URL url = new URL(addGameUserAPI);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+
+                ObjectNode bodyAddGame = objectMapper.createObjectNode();
+                bodyAddGame.put("username", username);
+                bodyAddGame.put("codigoGame", codigoGame);
+
+                try (OutputStream os = conn.getOutputStream()) {
+                    byte[] input = bodyAddGame.toString().getBytes("utf-8");
+                    os.write(input, 0, input.length);
+                }
+
+                int code = conn.getResponseCode();
+                context.getLogger().log("AddGameToUser response code: " + code);
+
+            } catch (Exception e) {
+                context.getLogger().log("Error llamando AddGameToUser: " + e.getMessage());
+            }
 
             // ------------------------------
             // RESPUESTA FINAL PARA ANDROID
@@ -186,13 +207,11 @@ public class JoinGameHandler implements RequestHandler<APIGatewayProxyRequestEve
                     ))
                     .withBody(responseNode.toString());
 
-
         } catch (Exception e) {
             context.getLogger().log("Error en JoinGameHandler: " + e);
             return response(500, "Error interno: " + e.getMessage());
         }
     }
-
 
     private APIGatewayProxyResponseEvent response(int code, String msg) {
         return new APIGatewayProxyResponseEvent()
