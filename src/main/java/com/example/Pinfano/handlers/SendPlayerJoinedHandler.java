@@ -51,18 +51,6 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
         Table connectionsTable = dynamo.getTable(CONNECTIONS_TABLE);
         Table gamesTable = dynamo.getTable(GAMES_TABLE);
 
-        // Guardar la conexión en DynamoDB
-        try {
-            Item item = new Item()
-                    .withPrimaryKey("connectionId", connectionId)
-                    .withString("username", username)
-                    .withString("codigoGame", codigoGame);
-            connectionsTable.putItem(item);
-            context.getLogger().log("✅ Connection saved in DynamoDB");
-        } catch (Exception e) {
-            context.getLogger().log("❌ Error saving connection: " + e.getMessage());
-        }
-
         // ----------------------
         // Obtener conexiones del mismo juego usando ConsistentRead
         List<String> targetConnections = new ArrayList<>();
@@ -84,25 +72,19 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
             context.getLogger().log("❌ Error scanning connections table: " + e.getMessage());
         }
 
-        // ----------------------
-        // Obtener numjugadores del juego usando scan consistente
-        int maxPlayers = 4; // valor por defecto
+        // Obtener numjugadores del juego CORRECTAMENTE
+        int maxPlayers = 4; // fallback
         try {
-            ScanSpec scanSpec = new ScanSpec().withConsistentRead(true);
-            ItemCollection<?> allGames = gamesTable.scan(scanSpec);
+            Item gameItem = gamesTable.getItem("codigoGame", codigoGame);
 
-            for (Item g : allGames) {
-                if (codigoGame.equals(g.getString("codigoGame")) && g.isPresent("numjugadores")) {
-                    maxPlayers = g.getInt("numjugadores");
-                    break;
-                }
+            if (gameItem != null && gameItem.isPresent("numjugadores")) {
+                maxPlayers = gameItem.getInt("numjugadores");
             }
 
         } catch (Exception e) {
-            context.getLogger().log("❌ Error scanning games table: " + e.getMessage());
+            context.getLogger().log("❌ Error reading game item: " + e.getMessage());
         }
 
-        // ----------------------
         // Crear JSON y notificar a todos los jugadores
         try {
             JSONObject msgJson = new JSONObject();
