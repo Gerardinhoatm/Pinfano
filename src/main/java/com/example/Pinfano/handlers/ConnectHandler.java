@@ -36,11 +36,10 @@ public class ConnectHandler implements RequestHandler<APIGatewayV2WebSocketEvent
             return null;
         }
 
-        // ✔ Guardar conexión correcta
         Map<String, AttributeValue> item = new HashMap<>();
         item.put("connectionId", new AttributeValue(connectionId));
         item.put("username", new AttributeValue(username));
-        item.put("codigoGame", new AttributeValue(codigoGame)); // ← IMPORTANTE: ESTE CAMPO
+        item.put("codigoGame", new AttributeValue(codigoGame));
 
         PutItemRequest request = new PutItemRequest()
                 .withTableName(TABLE_NAME)

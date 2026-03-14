@@ -37,7 +37,6 @@ public class DisconnectHandler implements RequestHandler<APIGatewayV2WebSocketEv
         Table connectionsTable = dynamo.getTable(CONNECTIONS_TABLE);
         Table gamesTable = dynamo.getTable(GAMES_TABLE);
 
-        // 1️⃣ Buscar la conexión por connectionId (PRIMARY KEY)
         Item playerItem = connectionsTable.getItem("connectionId", connectionId);
 
         if (playerItem == null) {
@@ -50,11 +49,9 @@ public class DisconnectHandler implements RequestHandler<APIGatewayV2WebSocketEv
 
         context.getLogger().log("👤 Desconectando jugador = " + username + " del game = " + codigoGame);
 
-        // 2️⃣ Borrar la conexión
         connectionsTable.deleteItem("connectionId", connectionId);
         context.getLogger().log("🧹 Conexión eliminada correctamente.");
 
-        // 3️⃣ Buscar GAME por codigoGame mediante SCAN (NO hay GSI)
         Item gameItem = null;
 
         ScanSpec scanSpec = new ScanSpec()
@@ -73,8 +70,6 @@ public class DisconnectHandler implements RequestHandler<APIGatewayV2WebSocketEv
         if (gameItem != null && gameItem.isPresent("numJugadores")) {
             maxPlayers = gameItem.getInt("numJugadores");
         }
-
-        // 4️⃣ Obtener todas las conexiones restantes del mismo game con SCAN
         List<String> targets = new ArrayList<>();
         int connectedPlayers = 0;
 
@@ -89,14 +84,12 @@ public class DisconnectHandler implements RequestHandler<APIGatewayV2WebSocketEv
             connectedPlayers++;
         }
 
-        // 5️⃣ Preparar JSON
         JSONObject json = new JSONObject();
         json.put("type", "playerLeft");
         json.put("username", username);
         json.put("connectedPlayers", connectedPlayers);
         json.put("maxPlayers", maxPlayers);
 
-        // 6️⃣ Enviar notificación
         AmazonApiGatewayManagementApi apiClient =
                 AmazonApiGatewayManagementApiClientBuilder.standard()
                         .withEndpointConfiguration(

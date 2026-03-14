@@ -51,8 +51,6 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
         Table connectionsTable = dynamo.getTable(CONNECTIONS_TABLE);
         Table gamesTable = dynamo.getTable(GAMES_TABLE);
 
-        // ----------------------
-        // Obtener conexiones del mismo juego usando ConsistentRead
         List<String> targetConnections = new ArrayList<>();
         int connectedPlayers = 0;
 
@@ -71,21 +69,17 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
         } catch (Exception e) {
             context.getLogger().log("❌ Error scanning connections table: " + e.getMessage());
         }
-
-        // Obtener numjugadores del juego CORRECTAMENTE
-        int maxPlayers = 4; // fallback
+        int maxPlayers = 4;
         try {
             Item gameItem = gamesTable.getItem("codigoGame", codigoGame);
 
-            if (gameItem != null && gameItem.isPresent("numjugadores")) {
-                maxPlayers = gameItem.getInt("numjugadores");
+            if (gameItem != null && gameItem.isPresent("numJugadores")) {
+                maxPlayers = gameItem.getInt("numJugadores");
             }
 
         } catch (Exception e) {
             context.getLogger().log("❌ Error reading game item: " + e.getMessage());
         }
-
-        // Crear JSON y notificar a todos los jugadores
         try {
             JSONObject msgJson = new JSONObject();
             msgJson.put("type", "playerJoined");
