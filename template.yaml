@@ -348,7 +348,7 @@ Resources:
       Environment:
         Variables:
           GAMES_TABLE: PinfanoGames
-  #Funcion para unirse a dicho game despues de validar
+  # Funcion para unirse a dicho game despues de validar
   GetGamePlayersFunction:
     Type: AWS::Serverless::Function
     Properties:
