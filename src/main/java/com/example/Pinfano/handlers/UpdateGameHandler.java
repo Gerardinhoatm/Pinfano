@@ -38,7 +38,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             // --- Parsear body de la peticion ---
             JSONObject body = new JSONObject(event.getBody());
             String codigoGame = body.getString("codigoGame");
-            int turno = body.getInt("turno");
             JSONArray fichaArr = body.getJSONArray("ficha");
             int fichaFirst = fichaArr.getInt(0);
             int fichaSecond = fichaArr.getInt(1);
