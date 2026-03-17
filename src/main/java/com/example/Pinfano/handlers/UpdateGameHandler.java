@@ -4,15 +4,15 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Item;
+import com.amazonaws.services.dynamodbv2.document.ItemCollection;
+import com.amazonaws.services.dynamodbv2.document.ScanOutcome;
 import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import java.util.Map;
 
 public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
@@ -30,24 +30,38 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int fichaFirst = fichaArr.getInt(0);
             int fichaSecond = fichaArr.getInt(1);
             int posicion = body.getInt("posicion");
+
             context.getLogger().log("codigoGame=" + codigoGame + ", ficha=" + fichaFirst + "," + fichaSecond + ", posicion=" + posicion + "\n");
 
             Table table = dynamoDB.getTable(gameTable);
             context.getLogger().log("Buscando partida en tabla: " + gameTable + " con codigoGame=" + codigoGame + "\n");
 
-            // --- Obtener partida actual ---
-            Item gameItem = table.scan("codigoGame = :codigo", null, Map.of(":codigo", codigoGame))
-                    .iterator().next();
+            // --- Buscar partida de forma segura usando scan ---
+            ItemCollection<ScanOutcome> items = table.scan(
+                    "codigoGame = :codigo",
+                    null,
+                    Map.of(":codigo", codigoGame)
+            );
+
+            Item gameItem = null;
+            for (Item i : items) {
+                gameItem = i;
+                break; // Tomamos la primera coincidencia
+            }
+
+            if (gameItem == null) {
+                return error("No se encontró partida con codigoGame=" + codigoGame);
+            }
 
             JSONObject gameJson = new JSONObject(gameItem.getJSON("json"));
 
             // --- Tablero y fichas dentro del json ---
             JSONArray tablero = gameJson.getJSONArray("tablero");
             JSONArray fichasSalidas = gameJson.has("fichasSalidas") ? gameJson.getJSONArray("fichasSalidas") : new JSONArray();
-            JSONArray fichasJ1 = gameJson.getJSONArray("fichasJ1");    // jugador 1
-            JSONArray fichasJ2 = gameJson.getJSONArray("fichasBot1");  // jugador 2
-            JSONArray fichasJ3 = gameJson.getJSONArray("fichasJ2");    // jugador 3
-            JSONArray fichasJ4 = gameJson.getJSONArray("fichasBot2");  // jugador 4
+            JSONArray fichasJ1 = gameJson.getJSONArray("fichasJ1");
+            JSONArray fichasJ2 = gameJson.getJSONArray("fichasBot1");
+            JSONArray fichasJ3 = gameJson.getJSONArray("fichasJ2");
+            JSONArray fichasJ4 = gameJson.getJSONArray("fichasBot2");
             int turno = gameJson.getInt("turno");
             int puntosA = gameJson.optInt("puntosA", 0);
             int puntosB = gameJson.optInt("puntosB", 0);
@@ -57,16 +71,13 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int coincidente = fichaActual.getInt("first") == fichaFirst || fichaActual.getInt("second") == fichaFirst ? fichaFirst : fichaSecond;
             int otro = (coincidente == fichaFirst) ? fichaSecond : fichaFirst;
 
-            context.getLogger().log("ficha=" + fichaActual);
-            context.getLogger().log("coincide ficha=" + coincidente);
-            context.getLogger().log("otro=" + otro);
+            context.getLogger().log("ficha actual=" + fichaActual);
+            context.getLogger().log("coincidente=" + coincidente + ", otro=" + otro);
 
             JSONObject nuevaFicha = new JSONObject();
-            nuevaFicha.put("first", otro);  // nuevo valor izquierda
-            nuevaFicha.put("second", coincidente);  // coincidente a derecha
+            nuevaFicha.put("first", otro);
+            nuevaFicha.put("second", coincidente);
             tablero.put(posicion, nuevaFicha);
-
-            context.getLogger().log("Nueva ficha=" + nuevaFicha);
 
             // --- Añadir ficha a fichasSalidas ---
             JSONArray nuevaFichaArr = new JSONArray();
@@ -74,8 +85,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             nuevaFichaArr.put(coincidente);
             fichasSalidas.put(nuevaFichaArr);
             gameJson.put("fichasSalidas", fichasSalidas);
-
-            context.getLogger().log("ficha salidas =" + fichasSalidas);
 
             // --- Quitar ficha del jugador correspondiente ---
             JSONArray fichasJugador;
@@ -91,7 +100,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     break;
                 }
             }
-            context.getLogger().log("fichas jugador=" + fichasJugador);
 
             // --- Recalcular puntos ---
             int sumaIzq = 0;
@@ -110,7 +118,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
             context.getLogger().log("Puntos después de actualizar: puntosA=" + puntosA + ", puntosB=" + puntosB + ", siguiente turno=" + turno + "\n");
 
-            // --- Guardar todos los cambios en el campo json ---
+            // --- Guardar todos los cambios ---
             gameJson.put("tablero", tablero);
             gameJson.put("fichasJ1", fichasJ1);
             gameJson.put("fichasBot1", fichasJ2);
