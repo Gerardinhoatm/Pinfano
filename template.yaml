@@ -238,32 +238,6 @@ Resources:
           USERS_TABLE: PinfanoUsers
           CONNECTIONS_TABLE: PinfanoConnections
 
-  # funcion de TableGameHandler crea la tabla del estado inicial de la partida
-  TableGameFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: PinfanoTableGameHandler
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: PinfanoGames
-        - DynamoDBCrudPolicy:
-            TableName: PinfanoConnections
-      Handler: com.example.Pinfano.handlers.TableGameHandler::handleRequest
-      Runtime: java17
-      MemorySize: 512
-      Timeout: 10
-      Events:
-        TableGameApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref PinfanoRestApi
-            Path: /tableGameHandler
-            Method: POST
-      Environment:
-        Variables:
-          GAMES_TABLE: PinfanoGames
-          CONNECTIONS_TABLE: PinfanoConnections
-
   # función de CreateGameHandler para crear partidas en la base de datos
   CreateGameFunction:
     Type: AWS::Serverless::Function
@@ -286,7 +260,6 @@ Resources:
       Environment:
         Variables:
           GAMES_TABLE: PinfanoGames
-
 
   # funcion de LeerFichasCSVFunction lee las fichas del fichero del servidor del bucket
   ReadTilesCSVFunction:
@@ -375,7 +348,7 @@ Resources:
       Environment:
         Variables:
           GAMES_TABLE: PinfanoGames
-  #Funcion para unirse a dicho game despues de validar
+  # Funcion para unirse a dicho game despues de validar
   GetGamePlayersFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -393,6 +366,28 @@ Resources:
           Properties:
             RestApiId: !Ref PinfanoRestApi
             Path: /getGamePlayers
+            Method: POST
+      Environment:
+        Variables:
+          GAMES_TABLE: PinfanoGames
+
+  UpdateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoUpdateGame
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoGames
+      Handler: com.example.Pinfano.handlers.UpdateGameHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        UpdateGameApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /updategame
             Method: POST
       Environment:
         Variables:
@@ -443,30 +438,6 @@ Resources:
       Environment:
         Variables:
           GAMES_TABLE: PinfanoGames
-
-  # función de UpdateGame: actualiza el estado de la partida tras colocar ficha
-  UpdateGameFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: PinfanoUpdateGame
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: PinfanoGames
-      Handler: com.example.Pinfano.handlers.UpdateGameHandler::handleRequest
-      Runtime: java17
-      MemorySize: 512
-      Timeout: 15
-      Events:
-        UpdateGameApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref PinfanoRestApi
-            Path: /updategame
-            Method: POST
-      Environment:
-        Variables:
-          GAMES_TABLE: PinfanoGames
-          REST_API_URL: !Sub "https://${PinfanoRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
 
   # función de GetGameByCodigo: obtiene la partida por su código
   GetGameByCodigoFunction:
