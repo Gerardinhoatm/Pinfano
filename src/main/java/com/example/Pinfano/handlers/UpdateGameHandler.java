@@ -30,8 +30,10 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int fichaFirst = fichaArr.getInt(0);
             int fichaSecond = fichaArr.getInt(1);
             int posicion = body.getInt("posicion");
+            context.getLogger().log("codigoGame=" + codigoGame + ", ficha=" + fichaFirst + "," + fichaSecond + ", posicion=" + posicion + "\n");
 
             Table table = dynamoDB.getTable(gameTable);
+            context.getLogger().log("Buscando partida en tabla: " + gameTable + " con codigoGame=" + codigoGame + "\n");
 
             // --- Obtener partida actual ---
             Item gameItem = table.scan("codigoGame = :codigo", null, Map.of(":codigo", codigoGame))
@@ -55,10 +57,16 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int coincidente = fichaActual.getInt("first") == fichaFirst || fichaActual.getInt("second") == fichaFirst ? fichaFirst : fichaSecond;
             int otro = (coincidente == fichaFirst) ? fichaSecond : fichaFirst;
 
+            context.getLogger().log("ficha=" + fichaActual);
+            context.getLogger().log("coincide ficha=" + coincidente);
+            context.getLogger().log("otro=" + otro);
+
             JSONObject nuevaFicha = new JSONObject();
             nuevaFicha.put("first", otro);  // nuevo valor izquierda
             nuevaFicha.put("second", coincidente);  // coincidente a derecha
             tablero.put(posicion, nuevaFicha);
+
+            context.getLogger().log("Nueva ficha=" + nuevaFicha);
 
             // --- Añadir ficha a fichasSalidas ---
             JSONArray nuevaFichaArr = new JSONArray();
@@ -66,6 +74,8 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             nuevaFichaArr.put(coincidente);
             fichasSalidas.put(nuevaFichaArr);
             gameJson.put("fichasSalidas", fichasSalidas);
+
+            context.getLogger().log("ficha salidas =" + fichasSalidas);
 
             // --- Quitar ficha del jugador correspondiente ---
             JSONArray fichasJugador;
@@ -81,6 +91,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     break;
                 }
             }
+            context.getLogger().log("fichas jugador=" + fichasJugador);
 
             // --- Recalcular puntos ---
             int sumaIzq = 0;
@@ -96,6 +107,8 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             // --- Avanzar turno ---
             turno++;
             if (turno > 4) turno = 1;
+
+            context.getLogger().log("Puntos después de actualizar: puntosA=" + puntosA + ", puntosB=" + puntosB + ", siguiente turno=" + turno + "\n");
 
             // --- Guardar todos los cambios en el campo json ---
             gameJson.put("tablero", tablero);
