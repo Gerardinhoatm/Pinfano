@@ -148,7 +148,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
             existingItem.withJSON("json", gameJson.toString());
             table.putItem(existingItem);
-
             context.getLogger().log("Partida guardada en DynamoDB con idGame=" + idGame + "\n");
 
             // --- Devolver JSON actualizado ---
