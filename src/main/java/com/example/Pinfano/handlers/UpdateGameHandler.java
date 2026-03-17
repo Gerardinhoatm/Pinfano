@@ -12,10 +12,6 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.Map;
 
 public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
@@ -23,7 +19,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     private final AmazonDynamoDB client = AmazonDynamoDBClientBuilder.defaultClient();
     private final DynamoDB dynamoDB = new DynamoDB(client);
     private final String gameTable = System.getenv().getOrDefault("GAMES_TABLE", "PinfanoGames");
-    private final String restApiUrl = System.getenv().getOrDefault("REST_API_URL", "");
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
@@ -46,33 +41,25 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             context.getLogger().log("UpdateGame: codigoGame=" + codigoGame +
                     ", ficha=[" + fichaFirst + "," + fichaSecond + "], posicion=" + posicion + "\n");
 
-            // --- Llamar a GetGameByCodigoHandler para obtener la partida ---
-            String apiUrl = restApiUrl + "/gamecode";
-            context.getLogger().log("Llamando a GetGameByCodigo: " + apiUrl + "\n");
+            // --- Llamar directamente a GetGameByCodigoHandler ---
+            GetGameByCodigoHandler getHandler = new GetGameByCodigoHandler();
+            APIGatewayProxyRequestEvent getRequest = new APIGatewayProxyRequestEvent();
+            getRequest.setHttpMethod("GET");
+            getRequest.setHeaders(Map.of("X-codigoGame", codigoGame));
 
-            HttpClient httpClient = HttpClient.newHttpClient();
-            HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(apiUrl))
-                    .header("accept", "application/json")
-                    .header("X-codigoGame", codigoGame)
-                    .GET()
-                    .build();
+            APIGatewayProxyResponseEvent getResponse = getHandler.handleRequest(getRequest, context);
 
-            HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-            context.getLogger().log("GetGameByCodigo status: " + httpResponse.statusCode() + "\n");
-
-            if (httpResponse.statusCode() != 200) {
-                return error("No se pudo obtener la partida: " + httpResponse.body());
+            if (getResponse.getStatusCode() != 200) {
+                return error("No se pudo obtener la partida: " + getResponse.getBody());
             }
 
-            // --- Parsear respuesta: contiene idGame, codigoGame, json, etc. ---
-            JSONObject fullItem = new JSONObject(httpResponse.body());
+            JSONObject fullItem = new JSONObject(getResponse.getBody());
             String idGame = fullItem.getString("idGame");
             JSONObject gameJson = fullItem.getJSONObject("json");
 
             context.getLogger().log("Partida encontrada: idGame=" + idGame + "\n");
 
-            // --- Extraer datos del JSON del juego ---
+            // --- Actualizar tablero ---
             JSONArray tablero = gameJson.getJSONArray("tablero");
             JSONArray fichasSalidas = gameJson.has("fichasSalidas")
                     ? gameJson.getJSONArray("fichasSalidas") : new JSONArray();
@@ -89,53 +76,44 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
             JSONArray fichasJugador = gameJson.getJSONArray(keyJugador);
 
-            // --- Sustituir ficha en tablero (formato [first, second]) ---
+            // --- Sustituir ficha en tablero ---
             JSONArray nuevaFichaTablero = new JSONArray();
             nuevaFichaTablero.put(fichaFirst);
             nuevaFichaTablero.put(fichaSecond);
             tablero.put(posicion, nuevaFichaTablero);
-            context.getLogger().log("Tablero actualizado en posicion " + posicion +
-                    ": [" + fichaFirst + "," + fichaSecond + "]\n");
 
-            // --- Anadir ficha a fichasSalidas ---
+            // --- Añadir ficha a fichasSalidas ---
             JSONArray nuevaFichaSalida = new JSONArray();
             nuevaFichaSalida.put(fichaFirst);
             nuevaFichaSalida.put(fichaSecond);
             fichasSalidas.put(nuevaFichaSalida);
-            context.getLogger().log("Ficha anadida a fichasSalidas\n");
 
-            // --- Quitar ficha del jugador correspondiente ---
+            // --- Quitar ficha del jugador ---
             for (int i = 0; i < fichasJugador.length(); i++) {
                 JSONArray f = fichasJugador.getJSONArray(i);
                 if ((f.getInt(0) == fichaFirst && f.getInt(1) == fichaSecond) ||
                         (f.getInt(0) == fichaSecond && f.getInt(1) == fichaFirst)) {
                     fichasJugador.remove(i);
-                    context.getLogger().log("Ficha eliminada del jugador " + turnoActual +
-                            " (" + keyJugador + ")\n");
                     break;
                 }
             }
 
-            // --- Recalcular puntos (suma de extremos exteriores, ficha.first) ---
+            // --- Recalcular puntos ---
             int sumaExtremos = 0;
             for (int i = 0; i < tablero.length(); i++) {
                 JSONArray f = tablero.getJSONArray(i);
-                if (f.length() >= 2 && f.getInt(0) >= 0) {
-                    sumaExtremos += f.getInt(0);
-                }
+                if (f.length() >= 2 && f.getInt(0) >= 0) sumaExtremos += f.getInt(0);
             }
             if (sumaExtremos > 0 && sumaExtremos % 5 == 0) {
                 if (turnoActual == 1 || turnoActual == 3) puntosA += sumaExtremos;
                 else puntosB += sumaExtremos;
             }
-            context.getLogger().log("Suma extremos=" + sumaExtremos +
-                    ", puntosA=" + puntosA + ", puntosB=" + puntosB + "\n");
 
             // --- Avanzar turno ---
             int nuevoTurno = turnoActual + 1;
             if (nuevoTurno > 4) nuevoTurno = 1;
 
-            // --- Actualizar todos los campos modificados en el JSON ---
+            // --- Actualizar JSON ---
             gameJson.put("tablero", tablero);
             gameJson.put("fichasSalidas", fichasSalidas);
             gameJson.put(keyJugador, fichasJugador);
@@ -143,20 +121,17 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             gameJson.put("puntosA", puntosA);
             gameJson.put("puntosB", puntosB);
 
-            context.getLogger().log("JSON actualizado. Nuevo turno=" + nuevoTurno + "\n");
-
-            // --- Borrar json antiguo y guardar el nuevo en DynamoDB ---
+            // --- Guardar en DynamoDB ---
             Table table = dynamoDB.getTable(gameTable);
             Item existingItem = table.getItem("idGame", idGame);
-            if (existingItem == null) {
-                return error("Item no encontrado en DynamoDB con idGame=" + idGame);
-            }
+            if (existingItem == null) return error("Item no encontrado en DynamoDB con idGame=" + idGame);
+
             existingItem.withJSON("json", gameJson.toString());
             table.putItem(existingItem);
 
             context.getLogger().log("Partida guardada en DynamoDB con idGame=" + idGame + "\n");
 
-            // --- Devolver el nuevo JSON (mismo formato que GetGameByCodigo) ---
+            // --- Devolver JSON actualizado ---
             JSONObject responseBody = new JSONObject();
             responseBody.put("json", gameJson);
 
