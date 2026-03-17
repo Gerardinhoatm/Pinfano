@@ -371,6 +371,28 @@ Resources:
         Variables:
           GAMES_TABLE: PinfanoGames
 
+  UpdateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoUpdateGame
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoGames
+      Handler: com.example.Pinfano.handlers.UpdateGameHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        UpdateGameApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PinfanoRestApi
+            Path: /updategame
+            Method: POST
+      Environment:
+        Variables:
+          GAMES_TABLE: PinfanoGames
+
   ContinueGameFunction:
     Type: AWS::Serverless::Function
     Properties:
