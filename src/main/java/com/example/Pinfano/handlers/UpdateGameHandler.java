@@ -76,10 +76,30 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
             JSONArray fichasJugador = gameJson.getJSONArray(keyJugador);
 
-            // --- Sustituir ficha en tablero ---
+            // --- Sustituir ficha en tablero con orden correcto ---
+            JSONArray fichaAntigua = tablero.getJSONArray(posicion);
+
+            int fichaAntiguaFirst = fichaAntigua.getInt(0);
+
+            int newFirst, newSecond;
+
+            // Comprobar cuál de los números de fichaActual coincide con fichaAntigua.first
+            if (fichaFirst == fichaAntiguaFirst) {
+                newSecond = fichaFirst;
+                newFirst = fichaSecond;
+            } else if (fichaSecond == fichaAntiguaFirst) {
+                newSecond = fichaSecond;
+                newFirst = fichaFirst;
+            } else {
+                // Si no coincide ninguno, dejamos fichaActual tal cual
+                newFirst = fichaFirst;
+                newSecond = fichaSecond;
+            }
+
             JSONArray nuevaFichaTablero = new JSONArray();
-            nuevaFichaTablero.put(fichaFirst);
-            nuevaFichaTablero.put(fichaSecond);
+            nuevaFichaTablero.put(newFirst);
+            nuevaFichaTablero.put(newSecond);
+
             tablero.put(posicion, nuevaFichaTablero);
 
             // --- Añadir ficha a fichasSalidas ---
