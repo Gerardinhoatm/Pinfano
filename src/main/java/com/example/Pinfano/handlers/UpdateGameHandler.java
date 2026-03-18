@@ -9,6 +9,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -23,14 +24,11 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
 
-        if ("OPTIONS".equalsIgnoreCase(event.getHttpMethod())) {
-            return new APIGatewayProxyResponseEvent()
-                    .withStatusCode(200)
-                    .withHeaders(corsHeaders());
-        }
-
         try {
-            // --- Parsear body de la peticion ---
+            if ("OPTIONS".equalsIgnoreCase(event.getHttpMethod())) {
+                return response(200, "OK");
+            }
+
             JSONObject body = new JSONObject(event.getBody());
             String codigoGame = body.getString("codigoGame");
             JSONArray fichaArr = body.getJSONArray("ficha");
@@ -38,77 +36,65 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int fichaSecond = fichaArr.getInt(1);
             int posicion = body.getInt("posicion");
 
-            context.getLogger().log("UpdateGame: codigoGame=" + codigoGame +
-                    ", ficha=[" + fichaFirst + "," + fichaSecond + "], posicion=" + posicion + "\n");
-
-            // --- Llamar directamente a GetGameByCodigoHandler ---
+            // Obtener JSON completo desde Dynamo mediante GetGameByCodigo
             GetGameByCodigoHandler getHandler = new GetGameByCodigoHandler();
-            APIGatewayProxyRequestEvent getRequest = new APIGatewayProxyRequestEvent();
-            getRequest.setHttpMethod("GET");
-            getRequest.setHeaders(Map.of("X-codigoGame", codigoGame));
+            APIGatewayProxyRequestEvent getReq = new APIGatewayProxyRequestEvent();
+            getReq.setHttpMethod("GET");
+            getReq.setHeaders(Map.of("X-codigoGame", codigoGame));
 
-            APIGatewayProxyResponseEvent getResponse = getHandler.handleRequest(getRequest, context);
+            APIGatewayProxyResponseEvent getRes = getHandler.handleRequest(getReq, context);
+            if (getRes.getStatusCode() != 200) return error("Partida no encontrada");
 
-            if (getResponse.getStatusCode() != 200) {
-                return error("No se pudo obtener la partida: " + getResponse.getBody());
-            }
-
-            JSONObject fullItem = new JSONObject(getResponse.getBody());
+            JSONObject fullItem = new JSONObject(getRes.getBody());
             String idGame = fullItem.getString("idGame");
             JSONObject gameJson = fullItem.getJSONObject("json");
 
-            context.getLogger().log("Partida encontrada: idGame=" + idGame + "\n");
-
-            // --- Actualizar tablero ---
+            // Actualizar tablero y estado del jugador
             JSONArray tablero = gameJson.getJSONArray("tablero");
-            JSONArray fichasSalidas = gameJson.has("fichasSalidas")
-                    ? gameJson.getJSONArray("fichasSalidas") : new JSONArray();
-            int turnoActual = gameJson.getInt("turno");
-            int puntosA = gameJson.optInt("puntosA", 0);
-            int puntosB = gameJson.optInt("puntosB", 0);
+            JSONArray fichasSalidas = gameJson.getJSONArray("fichasSalidas");
 
-            // --- Determinar fichas del jugador actual ---
-            String keyJugador;
-            if (turnoActual == 1) keyJugador = "fichasJ1";
-            else if (turnoActual == 2) keyJugador = "fichasBot1";
-            else if (turnoActual == 3) keyJugador = "fichasJ2";
-            else keyJugador = "fichasBot2";
+            int turnoActual = gameJson.getInt("turno");
+
+            String keyJugador = switch (turnoActual) {
+                case 1 -> "fichasJ1";
+                case 2 -> "fichasBot1";
+                case 3 -> "fichasJ2";
+                default -> "fichasBot2";
+            };
 
             JSONArray fichasJugador = gameJson.getJSONArray(keyJugador);
 
-            // --- Sustituir ficha en tablero con orden correcto ---
-            JSONArray fichaAntigua = tablero.getJSONArray(posicion);
+            // ORDEN CORRECTO EN TABLERO
+            JSONArray anterior = tablero.getJSONArray(posicion);
+            int extremoAnterior = anterior.getInt(0);
 
-            int fichaAntiguaFirst = fichaAntigua.getInt(0);
+            int nuevoFirst, nuevoSecond;
 
-            int newFirst, newSecond;
-
-            // Comprobar cuál de los números de fichaActual coincide con fichaAntigua.first
-            if (fichaFirst == fichaAntiguaFirst) {
-                newSecond = fichaFirst;
-                newFirst = fichaSecond;
-            } else if (fichaSecond == fichaAntiguaFirst) {
-                newSecond = fichaSecond;
-                newFirst = fichaFirst;
+            if (fichaFirst == extremoAnterior) {
+                nuevoFirst = fichaSecond;
+                nuevoSecond = fichaFirst;
+            } else if (fichaSecond == extremoAnterior) {
+                nuevoFirst = fichaFirst;
+                nuevoSecond = fichaSecond;
             } else {
-                // Si no coincide ninguno, dejamos fichaActual tal cual
-                newFirst = fichaFirst;
-                newSecond = fichaSecond;
+                // No encaja → pero lo pones igual
+                nuevoFirst = fichaFirst;
+                nuevoSecond = fichaSecond;
             }
 
-            JSONArray nuevaFichaTablero = new JSONArray();
-            nuevaFichaTablero.put(newFirst);
-            nuevaFichaTablero.put(newSecond);
+            JSONArray nuevaFicha = new JSONArray()
+                    .put(nuevoFirst)
+                    .put(nuevoSecond);
 
-            tablero.put(posicion, nuevaFichaTablero);
+            tablero.put(posicion, nuevaFicha);
 
-            // --- Añadir ficha a fichasSalidas ---
-            JSONArray nuevaFichaSalida = new JSONArray();
-            nuevaFichaSalida.put(fichaFirst);
-            nuevaFichaSalida.put(fichaSecond);
-            fichasSalidas.put(nuevaFichaSalida);
+            // Guardar ficha en fichasSalidas
+            JSONArray salida = new JSONArray();
+            salida.put(fichaFirst);
+            salida.put(fichaSecond);
+            fichasSalidas.put(salida);
 
-            // --- Quitar ficha del jugador ---
+            // Eliminar ficha del jugador
             for (int i = 0; i < fichasJugador.length(); i++) {
                 JSONArray f = fichasJugador.getJSONArray(i);
                 if ((f.getInt(0) == fichaFirst && f.getInt(1) == fichaSecond) ||
@@ -118,22 +104,26 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 }
             }
 
-            // --- Recalcular puntos ---
-            int sumaExtremos = 0;
+            // Recalcular puntos
+            int suma = 0;
             for (int i = 0; i < tablero.length(); i++) {
                 JSONArray f = tablero.getJSONArray(i);
-                if (f.length() >= 2 && f.getInt(0) >= 0) sumaExtremos += f.getInt(0);
-            }
-            if (sumaExtremos > 0 && sumaExtremos % 5 == 0) {
-                if (turnoActual == 1 || turnoActual == 3) puntosA += sumaExtremos;
-                else puntosB += sumaExtremos;
+                if (f.getInt(0) >= 0) suma += f.getInt(0);
             }
 
-            // --- Avanzar turno ---
+            int puntosA = gameJson.optInt("puntosA");
+            int puntosB = gameJson.optInt("puntosB");
+
+            if (suma > 0 && suma % 5 == 0) {
+                if (turnoActual == 1 || turnoActual == 3) puntosA += suma;
+                else puntosB += suma;
+            }
+
+            // Avanzar turno
             int nuevoTurno = turnoActual + 1;
             if (nuevoTurno > 4) nuevoTurno = 1;
 
-            // --- Actualizar JSON ---
+            // Actualizar JSON general
             gameJson.put("tablero", tablero);
             gameJson.put("fichasSalidas", fichasSalidas);
             gameJson.put(keyJugador, fichasJugador);
@@ -141,41 +131,39 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             gameJson.put("puntosA", puntosA);
             gameJson.put("puntosB", puntosB);
 
-            // --- Guardar en DynamoDB ---
+            // Guardar en DynamoDB
             Table table = dynamoDB.getTable(gameTable);
-            Item existingItem = table.getItem("idGame", idGame);
-            if (existingItem == null) return error("Item no encontrado en DynamoDB con idGame=" + idGame);
+            Item item = table.getItem("idGame", idGame);
+            item.withJSON("json", gameJson.toString());
+            table.putItem(item);
 
-            existingItem.withJSON("json", gameJson.toString());
-            table.putItem(existingItem);
-            context.getLogger().log("Partida guardada en DynamoDB con idGame=" + idGame + "\n");
+            // 🔥 LLAMAR A SENDJSON PARA MANDAR A TODOS ← IMPORTANTE
+            JSONObject sendData = new JSONObject();
+            sendData.put("codigoGame", codigoGame);
+            sendData.put("jsonGame", gameJson);
+            sendData.put("turno", nuevoTurno);
 
-            // --- Devolver JSON actualizado ---
-            JSONObject responseBody = new JSONObject();
-            responseBody.put("json", gameJson);
+            SendJsonHandler sender = new SendJsonHandler();
+            sender.sendUpdateToAll(sendData, context);
 
-            return new APIGatewayProxyResponseEvent()
-                    .withStatusCode(200)
-                    .withHeaders(corsHeaders())
-                    .withBody(responseBody.toString());
+            return response(200, gameJson.toString());
 
         } catch (Exception e) {
-            context.getLogger().log("Error: " + e.getMessage() + "\n");
-            return error("Error interno: " + e.getMessage());
+            return error(e.getMessage());
         }
     }
 
-    private Map<String, String> corsHeaders() {
-        return Map.of(
-                "Access-Control-Allow-Origin", "*",
-                "Access-Control-Allow-Headers", "*"
-        );
+    private APIGatewayProxyResponseEvent response(int code, String body) {
+        return new APIGatewayProxyResponseEvent()
+                .withStatusCode(code)
+                .withHeaders(Map.of(
+                        "Access-Control-Allow-Origin", "*",
+                        "Access-Control-Allow-Headers", "*"
+                ))
+                .withBody(body);
     }
 
     private APIGatewayProxyResponseEvent error(String msg) {
-        return new APIGatewayProxyResponseEvent()
-                .withStatusCode(400)
-                .withHeaders(corsHeaders())
-                .withBody("{\"error\":\"" + msg + "\"}");
+        return response(400, "{\"error\":\"" + msg + "\"}");
     }
 }
