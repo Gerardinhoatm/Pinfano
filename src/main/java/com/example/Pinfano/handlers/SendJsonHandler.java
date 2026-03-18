@@ -30,49 +30,59 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
     }
 
     public void sendUpdateToAll(JSONObject data, Context context) {
+        var logger = context.getLogger();
+        logger.log("[WS-START] Iniciando sendUpdateToAll");
 
-        String codigoGame = data.getString("codigoGame");
-        JSONObject jsonGame = data.getJSONObject("jsonGame");
-        int turno = data.getInt("turno");
+        try {
+            String codigoGame = data.getString("codigoGame");
+            int turno = data.getInt("turno");
 
-        // LEER TODAS LAS CONEXIONES DEL MISMO GAME
-        Table table = dynamo.getTable(TABLE);
-        List<String> connections = new ArrayList<>();
+            logger.log("[WS-INFO] Buscando conexiones para codigoGame: " + codigoGame);
 
-        for (Item item : table.scan()) {
-            if (codigoGame.equals(item.getString("codigoGame"))) {
-                connections.add(item.getString("connectionId"));
+            Table table = dynamo.getTable(TABLE);
+            List<String> connections = new ArrayList<>();
+
+            int totalScanned = 0;
+            for (Item item : table.scan()) {
+                totalScanned++;
+                if (codigoGame.equals(item.getString("codigoGame"))) {
+                    connections.add(item.getString("connectionId"));
+                }
             }
-        }
+            logger.log("[WS-INFO] Scan finalizado. Total en tabla: " + totalScanned + " | Encontradas para este juego: " + connections.size());
 
-        // JSON A ENVIAR
-        JSONObject msg = new JSONObject();
-        msg.put("type", "gameUpdated");
-        msg.put("codigoGame", codigoGame);
-        msg.put("jsonGame", jsonGame);
-        msg.put("turno", turno);
+            JSONObject msg = new JSONObject();
+            msg.put("type", "gameUpdated");
+            msg.put("codigoGame", codigoGame);
+            msg.put("jsonGame", data.getJSONObject("jsonGame"));
+            msg.put("turno", turno);
+            String domain = System.getenv("WS_DOMAIN");
+            String stage = System.getenv("WS_STAGE");
+            String endpoint = "https://" + domain + "/" + stage;
+            logger.log("[WS-CONFIG] Endpoint configurado: " + endpoint);
+            AmazonApiGatewayManagementApi api = AmazonApiGatewayManagementApiClientBuilder.standard()
+                    .withEndpointConfiguration(
+                            new AmazonApiGatewayManagementApiClientBuilder.EndpointConfiguration(
+                                    endpoint, "eu-central-1"))
+                    .build();
 
-        String domain = System.getenv("WS_DOMAIN");
-        String stage = System.getenv("WS_STAGE");
-
-        AmazonApiGatewayManagementApi api = AmazonApiGatewayManagementApiClientBuilder.standard()
-                .withEndpointConfiguration(
-                        new AmazonApiGatewayManagementApiClientBuilder.EndpointConfiguration(
-                                "https://" + domain + "/" + stage,
-                                "eu-central-1"))
-                .build();
-
-        // ENVIAR A CADA CLIENTE
-        for (String id : connections) {
-            try {
-                api.postToConnection(
-                        new PostToConnectionRequest()
-                                .withConnectionId(id)
-                                .withData(ByteBuffer.wrap(msg.toString().getBytes()))
-                );
-            } catch (Exception e) {
-                context.getLogger().log("Error enviando a " + id + ": " + e.getMessage());
+            for (String id : connections) {
+                try {
+                    logger.log("[WS-SENDING] Enviando a ConnectionId: " + id);
+                    api.postToConnection(
+                            new PostToConnectionRequest()
+                                    .withConnectionId(id)
+                                    .withData(ByteBuffer.wrap(msg.toString().getBytes()))
+                    );
+                    logger.log("[WS-OK] Enviado a " + id);
+                } catch (Exception e) {
+                    logger.log("[WS-ERROR] Fallo al enviar a " + id + ": " + e.getMessage());
+                }
             }
+            logger.log("[WS-END] Difusión finalizada");
+
+        } catch (Exception e) {
+            logger.log("[WS-FATAL] Error en sendUpdateToAll: " + e.getMessage());
         }
     }
 }

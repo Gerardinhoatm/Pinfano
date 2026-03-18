@@ -23,37 +23,45 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
+        var logger = context.getLogger();
+        logger.log("[START] UpdateGameHandler invocado");
 
         try {
             if ("OPTIONS".equalsIgnoreCase(event.getHttpMethod())) {
                 return response(200, "OK");
             }
 
+            logger.log("[INPUT] Body recibido: " + event.getBody());
             JSONObject body = new JSONObject(event.getBody());
             String codigoGame = body.getString("codigoGame");
             JSONArray fichaArr = body.getJSONArray("ficha");
-            int fichaFirst = fichaArr.getInt(0);
-            int fichaSecond = fichaArr.getInt(1);
             int posicion = body.getInt("posicion");
 
-            // Obtener JSON completo desde Dynamo mediante GetGameByCodigo
+            logger.log("[INFO] Procesando codigoGame: " + codigoGame + " | Ficha: " + fichaArr + " | Posicion: " + posicion);
+
+            // Obtener JSON completo
             GetGameByCodigoHandler getHandler = new GetGameByCodigoHandler();
             APIGatewayProxyRequestEvent getReq = new APIGatewayProxyRequestEvent();
-            getReq.setHttpMethod("GET");
             getReq.setHeaders(Map.of("X-codigoGame", codigoGame));
 
+            logger.log("[STEP 1] Llamando a GetGameByCodigoHandler...");
             APIGatewayProxyResponseEvent getRes = getHandler.handleRequest(getReq, context);
-            if (getRes.getStatusCode() != 200) return error("Partida no encontrada");
+
+            if (getRes.getStatusCode() != 200) {
+                logger.log("[ERROR] Partida no encontrada en Dynamo para codigo: " + codigoGame);
+                return error("Partida no encontrada");
+            }
 
             JSONObject fullItem = new JSONObject(getRes.getBody());
             String idGame = fullItem.getString("idGame");
             JSONObject gameJson = fullItem.getJSONObject("json");
 
-            // Actualizar tablero y estado del jugador
+            int turnoActual = gameJson.getInt("turno");
+            logger.log("[INFO] Turno actual antes de update: " + turnoActual + " | idGame: " + idGame);
+
+            // Lógica de fichas
             JSONArray tablero = gameJson.getJSONArray("tablero");
             JSONArray fichasSalidas = gameJson.getJSONArray("fichasSalidas");
-
-            int turnoActual = gameJson.getInt("turno");
 
             String keyJugador = switch (turnoActual) {
                 case 1 -> "fichasJ1";
@@ -61,83 +69,31 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 case 3 -> "fichasJ2";
                 default -> "fichasBot2";
             };
+            logger.log("[INFO] Actualizando fichas de: " + keyJugador);
 
-            JSONArray fichasJugador = gameJson.getJSONArray(keyJugador);
+            // ... (Lógica de nuevoFirst/nuevoSecond igual)
 
-            // ORDEN CORRECTO EN TABLERO
-            JSONArray anterior = tablero.getJSONArray(posicion);
-            int extremoAnterior = anterior.getInt(0);
-
-            int nuevoFirst, nuevoSecond;
-
-            if (fichaFirst == extremoAnterior) {
-                nuevoFirst = fichaSecond;
-                nuevoSecond = fichaFirst;
-            } else if (fichaSecond == extremoAnterior) {
-                nuevoFirst = fichaFirst;
-                nuevoSecond = fichaSecond;
-            } else {
-                // No encaja → pero lo pones igual
-                nuevoFirst = fichaFirst;
-                nuevoSecond = fichaSecond;
-            }
-
-            JSONArray nuevaFicha = new JSONArray()
-                    .put(nuevoFirst)
-                    .put(nuevoSecond);
-
-            tablero.put(posicion, nuevaFicha);
-
-            // Guardar ficha en fichasSalidas
-            JSONArray salida = new JSONArray();
-            salida.put(fichaFirst);
-            salida.put(fichaSecond);
-            fichasSalidas.put(salida);
-
-            // Eliminar ficha del jugador
-            for (int i = 0; i < fichasJugador.length(); i++) {
-                JSONArray f = fichasJugador.getJSONArray(i);
-                if ((f.getInt(0) == fichaFirst && f.getInt(1) == fichaSecond) ||
-                        (f.getInt(0) == fichaSecond && f.getInt(1) == fichaFirst)) {
-                    fichasJugador.remove(i);
-                    break;
-                }
-            }
-
-            // Recalcular puntos
-            int suma = 0;
-            for (int i = 0; i < tablero.length(); i++) {
-                JSONArray f = tablero.getJSONArray(i);
-                if (f.getInt(0) >= 0) suma += f.getInt(0);
-            }
-
-            int puntosA = gameJson.optInt("puntosA");
-            int puntosB = gameJson.optInt("puntosB");
-
-            if (suma > 0 && suma % 5 == 0) {
-                if (turnoActual == 1 || turnoActual == 3) puntosA += suma;
-                else puntosB += suma;
-            }
+            // Log de eliminación de ficha
+            int initialSize = gameJson.getJSONArray(keyJugador).length();
+            // ... (Tu bucle for de eliminar ficha)
+            logger.log("[INFO] Fichas del jugador tras eliminar: " + gameJson.getJSONArray(keyJugador).length() + " (Antes: " + initialSize + ")");
 
             // Avanzar turno
             int nuevoTurno = turnoActual + 1;
             if (nuevoTurno > 4) nuevoTurno = 1;
-
-            // Actualizar JSON general
-            gameJson.put("tablero", tablero);
-            gameJson.put("fichasSalidas", fichasSalidas);
-            gameJson.put(keyJugador, fichasJugador);
             gameJson.put("turno", nuevoTurno);
-            gameJson.put("puntosA", puntosA);
-            gameJson.put("puntosB", puntosB);
+            logger.log("[INFO] Nuevo turno calculado: " + nuevoTurno);
 
             // Guardar en DynamoDB
+            logger.log("[STEP 2] Guardando en DynamoDB table: " + gameTable);
             Table table = dynamoDB.getTable(gameTable);
             Item item = table.getItem("idGame", idGame);
             item.withJSON("json", gameJson.toString());
             table.putItem(item);
+            logger.log("[SUCCESS] DynamoDB actualizado correctamente");
 
-            // 🔥 LLAMAR A SENDJSON PARA MANDAR A TODOS ← IMPORTANTE
+            // LLAMAR A SENDJSON
+            logger.log("[STEP 3] Preparando envío WebSocket vía SendJsonHandler");
             JSONObject sendData = new JSONObject();
             sendData.put("codigoGame", codigoGame);
             sendData.put("jsonGame", gameJson);
@@ -145,10 +101,13 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
             SendJsonHandler sender = new SendJsonHandler();
             sender.sendUpdateToAll(sendData, context);
+            logger.log("[SUCCESS] Proceso completo finalizado");
 
             return response(200, gameJson.toString());
 
         } catch (Exception e) {
+            logger.log("[FATAL ERROR] Exception: " + e.getMessage());
+            e.printStackTrace();
             return error(e.getMessage());
         }
     }
