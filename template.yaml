@@ -378,6 +378,13 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: PinfanoGames
+        - DynamoDBReadPolicy:
+            TableName: PinfanoConnections
+        - Statement:
+            - Effect: Allow
+              Action:
+                - "execute-api:ManageConnections"
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
       Handler: com.example.Pinfano.handlers.UpdateGameHandler::handleRequest
       Runtime: java17
       MemorySize: 512
@@ -392,6 +399,9 @@ Resources:
       Environment:
         Variables:
           GAMES_TABLE: PinfanoGames
+          CONNECTIONS_TABLE: PinfanoConnections
+          WS_DOMAIN: !Sub "${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com"
+          WS_STAGE: Prod
 
   ContinueGameFunction:
     Type: AWS::Serverless::Function
@@ -610,10 +620,11 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: PinfanoConnections
-      Handler: com.example.Pinfano.handlers.SendJsonHandler::handleRequest
-      Runtime: java17
-      MemorySize: 512
-      Timeout: 10
+        - Statement: # Permite que esta lambda use la API de WebSockets
+            - Effect: Allow
+              Action:
+                - "execute-api:ManageConnections"
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
 
   SendJsonIntegration:
     Type: AWS::ApiGatewayV2::Integration
