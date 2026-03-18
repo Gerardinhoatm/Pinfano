@@ -603,6 +603,43 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/playerJoined
 
+  SendJsonFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PinfanoSendJson
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: PinfanoConnections
+      Handler: com.example.Pinfano.handlers.SendJsonHandler::handleRequest
+      Runtime: java17
+      MemorySize: 512
+      Timeout: 10
+
+  SendJsonIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SendJsonFunction.Arn}/invocations
+      IntegrationMethod: POST
+
+  SendJsonRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "sendJson"
+      AuthorizationType: NONE
+      Target: !Join [ "/", [ "integrations", !Ref SendJsonIntegration ] ]
+
+  PermissionForSendJson:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SendJsonFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/sendJson
+
 
 Outputs:
   WebSocketEndpoint:
