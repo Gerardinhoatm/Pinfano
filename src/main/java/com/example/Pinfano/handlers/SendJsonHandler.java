@@ -50,17 +50,16 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
             JSONObject msg = new JSONObject();
             msg.put("type", "gameUpdated");
             msg.put("codigoGame", codigoGame);
-            msg.put("jsonGame", data.getJSONObject("jsonGame"));
+
+            // 🔥 AHORA SE LLAMA "json"
+            msg.put("json", data.getJSONObject("json"));
+
             msg.put("turno", turno);
 
-            // 🔥 IMPORTANTE → WS_DOMAIN debe ser SOLO ESTO:
-            // jw4i7tvts0.execute-api.eu-central-1.amazonaws.com
             String domain = System.getenv("WS_DOMAIN");
             String stage = System.getenv("WS_STAGE");
 
-            // Endpoint correcto para API Gateway Management API
             String endpoint = "https://" + domain + "/" + stage;
-
             logger.log("[WS-CONFIG] Endpoint: " + endpoint);
 
             AmazonApiGatewayManagementApi api = AmazonApiGatewayManagementApiClientBuilder.standard()
