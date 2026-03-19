@@ -84,8 +84,6 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     jsonGame.put(key, jugadores.get(i));
                 }
                 jsonGame.put("puntos", puntos);
-                jsonGame.put("puntosA", 0);
-                jsonGame.put("puntosB", 0);
                 jsonGame.put("username", username);
                 jsonGame.put("estado", numJugadores == 1 ? "A" : "P");
                 jsonGame.put("terminado", false);
