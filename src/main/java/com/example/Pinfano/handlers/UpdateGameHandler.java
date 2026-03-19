@@ -35,8 +35,11 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             JSONObject body = new JSONObject(event.getBody());
             String codigoGame = body.getString("codigoGame");
             JSONArray fichaArr = body.getJSONArray("ficha");
+            int fichaFirst = fichaArr.getInt(0);
+            int fichaSecond = fichaArr.getInt(1);
             int posicion = body.getInt("posicion");
 
+            // Obtener JSON completo desde Dynamo mediante GetGameByCodigo
             logger.log("[INFO] Procesando codigoGame: " + codigoGame + " | Ficha: " + fichaArr + " | Posicion: " + posicion);
 
             // Obtener JSON completo
@@ -56,6 +59,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             String idGame = fullItem.getString("idGame");
             JSONObject gameJson = fullItem.getJSONObject("json");
 
+            // Actualizar tablero y estado del jugador
             int turnoActual = gameJson.getInt("turno");
             logger.log("[INFO] Turno actual antes de update: " + turnoActual + " | idGame: " + idGame);
 
@@ -71,8 +75,63 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             };
             logger.log("[INFO] Actualizando fichas de: " + keyJugador);
 
-            // ... (Lógica de nuevoFirst/nuevoSecond igual)
+            JSONArray fichasJugador = gameJson.getJSONArray(keyJugador);
 
+            // ORDEN CORRECTO EN TABLERO
+            JSONArray anterior = tablero.getJSONArray(posicion);
+            int extremoAnterior = anterior.getInt(0);
+
+            int nuevoFirst, nuevoSecond;
+
+            // ... (Lógica de nuevoFirst/nuevoSecond igual)
+            if (fichaFirst == extremoAnterior) {
+                nuevoFirst = fichaSecond;
+                nuevoSecond = fichaFirst;
+            } else if (fichaSecond == extremoAnterior) {
+                nuevoFirst = fichaFirst;
+                nuevoSecond = fichaSecond;
+            } else {
+                // No encaja → pero lo pones igual
+                nuevoFirst = fichaFirst;
+                nuevoSecond = fichaSecond;
+            }
+
+            JSONArray nuevaFicha = new JSONArray()
+                    .put(nuevoFirst)
+                    .put(nuevoSecond);
+
+            tablero.put(posicion, nuevaFicha);
+
+            // Guardar ficha en fichasSalidas
+            JSONArray salida = new JSONArray();
+            salida.put(fichaFirst);
+            salida.put(fichaSecond);
+            fichasSalidas.put(salida);
+
+            // Eliminar ficha del jugador
+            for (int i = 0; i < fichasJugador.length(); i++) {
+                JSONArray f = fichasJugador.getJSONArray(i);
+                if ((f.getInt(0) == fichaFirst && f.getInt(1) == fichaSecond) ||
+                        (f.getInt(0) == fichaSecond && f.getInt(1) == fichaFirst)) {
+                    fichasJugador.remove(i);
+                    break;
+                }
+            }
+
+            // Recalcular puntos
+            int suma = 0;
+            for (int i = 0; i < tablero.length(); i++) {
+                JSONArray f = tablero.getJSONArray(i);
+                if (f.getInt(0) >= 0) suma += f.getInt(0);
+            }
+
+            int puntosA = gameJson.optInt("puntosA");
+            int puntosB = gameJson.optInt("puntosB");
+
+            if (suma > 0 && suma % 5 == 0) {
+                if (turnoActual == 1 || turnoActual == 3) puntosA += suma;
+                else puntosB += suma;
+            }
             // Log de eliminación de ficha
             int initialSize = gameJson.getJSONArray(keyJugador).length();
             // ... (Tu bucle for de eliminar ficha)
@@ -81,8 +140,14 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             // Avanzar turno
             int nuevoTurno = turnoActual + 1;
             if (nuevoTurno > 4) nuevoTurno = 1;
+
+            // Actualizar JSON general
+            gameJson.put("tablero", tablero);
+            gameJson.put("fichasSalidas", fichasSalidas);
+            gameJson.put(keyJugador, fichasJugador);
             gameJson.put("turno", nuevoTurno);
-            logger.log("[INFO] Nuevo turno calculado: " + nuevoTurno);
+            gameJson.put("puntosA", puntosA);
+            gameJson.put("puntosB", puntosB);
 
             // Guardar en DynamoDB
             logger.log("[STEP 2] Guardando en DynamoDB table: " + gameTable);
