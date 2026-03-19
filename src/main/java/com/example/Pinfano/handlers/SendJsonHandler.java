@@ -26,6 +26,7 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
 
     @Override
     public Object handleRequest(APIGatewayV2WebSocketEvent event, Context context) {
+        context.getLogger().log("[WS-INFO] SendJsonHandler invocado, no se procesa nada aquí.");
         return null;
     }
 
@@ -37,29 +38,31 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
             String codigoGame = data.getString("codigoGame");
             int turno = data.getInt("turno");
 
-            logger.log("[WS-INFO] Buscando conexiones para codigoGame: " + codigoGame);
-
             Table table = dynamo.getTable(TABLE);
             List<String> connections = new ArrayList<>();
 
-            int totalScanned = 0;
             for (Item item : table.scan()) {
-                totalScanned++;
                 if (codigoGame.equals(item.getString("codigoGame"))) {
                     connections.add(item.getString("connectionId"));
                 }
             }
-            logger.log("[WS-INFO] Scan finalizado. Total en tabla: " + totalScanned + " | Encontradas para este juego: " + connections.size());
 
             JSONObject msg = new JSONObject();
             msg.put("type", "gameUpdated");
             msg.put("codigoGame", codigoGame);
             msg.put("jsonGame", data.getJSONObject("jsonGame"));
             msg.put("turno", turno);
+
+            // 🔥 IMPORTANTE → WS_DOMAIN debe ser SOLO ESTO:
+            // jw4i7tvts0.execute-api.eu-central-1.amazonaws.com
             String domain = System.getenv("WS_DOMAIN");
             String stage = System.getenv("WS_STAGE");
+
+            // Endpoint correcto para API Gateway Management API
             String endpoint = "https://" + domain + "/" + stage;
-            logger.log("[WS-CONFIG] Endpoint configurado: " + endpoint);
+
+            logger.log("[WS-CONFIG] Endpoint: " + endpoint);
+
             AmazonApiGatewayManagementApi api = AmazonApiGatewayManagementApiClientBuilder.standard()
                     .withEndpointConfiguration(
                             new AmazonApiGatewayManagementApiClientBuilder.EndpointConfiguration(
@@ -68,21 +71,23 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
 
             for (String id : connections) {
                 try {
-                    logger.log("[WS-SENDING] Enviando a ConnectionId: " + id);
+                    logger.log("[WS-SENDING] Enviando a " + id);
+
                     api.postToConnection(
                             new PostToConnectionRequest()
                                     .withConnectionId(id)
                                     .withData(ByteBuffer.wrap(msg.toString().getBytes()))
                     );
-                    logger.log("[WS-OK] Enviado a " + id);
+
                 } catch (Exception e) {
-                    logger.log("[WS-ERROR] Fallo al enviar a " + id + ": " + e.getMessage());
+                    logger.log("[WS-ERROR] Error con " + id + " → " + e.getMessage());
                 }
             }
-            logger.log("[WS-END] Difusión finalizada");
+
+            logger.log("[WS-END] Envío finalizado");
 
         } catch (Exception e) {
-            logger.log("[WS-FATAL] Error en sendUpdateToAll: " + e.getMessage());
+            logger.log("[WS-FATAL] " + e.getMessage());
         }
     }
 }
