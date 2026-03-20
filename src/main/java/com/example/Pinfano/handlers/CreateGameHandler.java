@@ -87,6 +87,8 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 jsonGame.put("username", username);
                 jsonGame.put("estado", numJugadores == 1 ? "A" : "P");
                 jsonGame.put("terminado", false);
+                List<String> pasosIniciales = Arrays.asList("VACIO", "VACIO", "VACIO", "VACIO");
+                jsonGame.put("paso", objectMapper.valueToTree(pasosIniciales));
                 jsonGame.put("listaPlayers", objectMapper.valueToTree(jugadores));
 
 
@@ -142,7 +144,8 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
                 // Fichas salidas y paso
                 jsonGame.put("fichasSalidas", "VACIO");
-                jsonGame.put("paso", "VACIO");
+                List<String> pasosIniciales = Arrays.asList("VACIO", "VACIO", "VACIO", "VACIO");
+                jsonGame.put("paso", objectMapper.valueToTree(pasosIniciales));
                 jsonGame.put("listaPlayers", objectMapper.valueToTree(jugadores));
 
             } else {
