@@ -63,6 +63,45 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int turnoActual = gameJson.getInt("turno");
             logger.log("[INFO] Turno actual antes de update: " + turnoActual + " | idGame: " + idGame);
 
+            if (posicion == -1) {
+                logger.log("[INFO] Jugador PASA el turno");
+
+                // 1. Obtener los extremos actuales del tablero para guardarlos en "paso"
+                JSONArray tableroActual = gameJson.getJSONArray("tablero");
+                // Formateamos los extremos (ejemplo: "1-4-4-3")
+                StringBuilder extremos = new StringBuilder();
+                for (int i = 0; i < tableroActual.length(); i++) {
+                    extremos.append(tableroActual.getJSONArray(i).getInt(0));
+                    if (i < tableroActual.length() - 1) extremos.append("-");
+                }
+
+                // 2. Actualizar el array "paso" en el JSON
+                // Si el turno es 1, actualiza paso[0]; si es 3, actualiza paso[2]
+                JSONArray pasoArr = gameJson.getJSONArray("paso");
+                pasoArr.put(turnoActual - 1, extremos.toString());
+
+                // 3. Avanzar el turno
+                int nuevoTurno = (turnoActual % 4) + 1;
+                gameJson.put("turno", nuevoTurno);
+                gameJson.put("paso", pasoArr);
+
+                // 4. Guardar en DynamoDB
+                Table table = dynamoDB.getTable(gameTable);
+                Item item = table.getItem("idGame", idGame);
+                item.withJSON("json", gameJson.toString());
+                table.putItem(item);
+
+                // 5. Notificar por WebSocket
+                JSONObject sendData = new JSONObject();
+                sendData.put("codigoGame", codigoGame);
+                sendData.put("json", gameJson);
+                sendData.put("turno", nuevoTurno);
+
+                new SendJsonHandler().sendUpdateToAll(sendData, context);
+
+                return response(200, gameJson.toString());
+            }
+
             // Lógica de fichas
             JSONArray tablero = gameJson.getJSONArray("tablero");
             JSONArray fichasSalidas = gameJson.getJSONArray("fichasSalidas");
