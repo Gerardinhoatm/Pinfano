@@ -36,8 +36,7 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
 
         try {
             String codigoGame = data.getString("codigoGame");
-            int turno = data.getInt("turno");
-
+            int turno = data.has("turno") ? data.getInt("turno") : -1;
             Table table = dynamo.getTable(TABLE);
             List<String> connections = new ArrayList<>();
 
@@ -54,7 +53,9 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
             // 🔥 AHORA SE LLAMA "json"
             msg.put("json", data.getJSONObject("json"));
 
-            msg.put("turno", turno);
+            if (turno != -1) {
+                msg.put("turno", turno);
+            }
 
             String domain = System.getenv("WS_DOMAIN");
             String stage = System.getenv("WS_STAGE");
