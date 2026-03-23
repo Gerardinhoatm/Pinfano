@@ -47,15 +47,19 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
             }
 
             JSONObject msg = new JSONObject();
-            msg.put("type", "gameUpdated");
+            msg.put("type", data.getString("type"));
             msg.put("codigoGame", codigoGame);
 
-            // 🔥 AHORA SE LLAMA "json"
-            msg.put("json", data.getJSONObject("json"));
+            if (data.has("json"))
+                msg.put("json", data.getJSONObject("json"));
 
-            if (turno != -1) {
+            if (turno != -1)
                 msg.put("turno", turno);
-            }
+
+            if (data.has("ganador")) msg.put("ganador", data.get("ganador"));
+            if (data.has("puntosA")) msg.put("puntosA", data.get("puntosA"));
+            if (data.has("puntosB")) msg.put("puntosB", data.get("puntosB"));
+            if (data.has("mano")) msg.put("mano", data.get("mano"));
 
             String domain = System.getenv("WS_DOMAIN");
             String stage = System.getenv("WS_STAGE");
