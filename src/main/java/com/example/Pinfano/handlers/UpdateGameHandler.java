@@ -57,33 +57,60 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             logger.log("[INFO] Turno actual antes de update: " + turnoActual + " | idGame: " + idGame);
             if (posicion == -1) {
                 logger.log("[INFO] Jugador PASA el turno");
-                // 1. Obtener los extremos actuales del tablero para guardarlos en "paso"
+
+                // 1. Extremos del tablero actual
                 JSONArray tableroActual = gameJson.getJSONArray("tablero");
-                // Formateamos los extremos (ejemplo: "1-4-4-3")
-                StringBuilder extremos = new StringBuilder();
+                Set<Integer> nuevos = new LinkedHashSet<>();
+
                 for (int i = 0; i < tableroActual.length(); i++) {
-                    extremos.append(tableroActual.getJSONArray(i).getInt(0));
-                    if (i < tableroActual.length() - 1) extremos.append("-");
+                    nuevos.add(tableroActual.getJSONArray(i).getInt(0));
                 }
-                // 2. Actualizar el array "paso" en el JSON
-                // Si el turno es 1, actualiza paso[0]; si es 3, actualiza paso[2]
+
+                // 2. Recuperar lo que había antes en el paso del jugador
                 JSONArray pasoArr = gameJson.getJSONArray("paso");
-                pasoArr.put(turnoActual - 1, extremos.toString());
-                // 3. Avanzar el turno
+                String anteriorPaso = pasoArr.getString(turnoActual - 1);
+
+                // Convertir lo anterior a Set
+                Set<Integer> anteriores = new LinkedHashSet<>();
+                if (!anteriorPaso.equals("") && !anteriorPaso.equals("VACIO")) {
+                    for (String s : anteriorPaso.split("-")) {
+                        if (!s.isEmpty()) anteriores.add(Integer.parseInt(s));
+                    }
+                }
+
+                // 3. Unir anteriores + nuevos sin duplicados
+                anteriores.addAll(nuevos);
+
+                // 4. Convertir a formato “1-3-4”
+                StringBuilder pasoFinal = new StringBuilder();
+                for (Integer n : anteriores) {
+                    if (pasoFinal.length() > 0) pasoFinal.append("-");
+                    pasoFinal.append(n);
+                }
+
+                // 5. Guardar el resultado
+                pasoArr.put(turnoActual - 1,
+                        pasoFinal.length() == 0 ? "VACIO" : pasoFinal.toString());
+
+                // 6. Avanzar turno
                 int nuevoTurno = (turnoActual % 4) + 1;
+
                 gameJson.put("turno", nuevoTurno);
                 gameJson.put("paso", pasoArr);
-                // 4. Guardar en DynamoDB
+
+                // 7. Guardar en DB y enviar WS
                 Table table = dynamoDB.getTable(gameTable);
                 Item item = table.getItem("idGame", idGame);
                 item.withJSON("json", gameJson.toString());
                 table.putItem(item);
-                // 5. Notificar por WebSocket
+
                 JSONObject sendData = new JSONObject();
                 sendData.put("codigoGame", codigoGame);
                 sendData.put("json", gameJson);
                 sendData.put("turno", nuevoTurno);
+
                 new SendJsonHandler().sendUpdateToAll(sendData, context);
+
                 return response(200, gameJson.toString());
             }
             // Lógica de fichas
