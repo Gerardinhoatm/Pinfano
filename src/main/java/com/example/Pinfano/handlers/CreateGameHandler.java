@@ -87,7 +87,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 jsonGame.put("username", username);
                 jsonGame.put("estado", numJugadores == 1 ? "A" : "P");
                 jsonGame.put("terminado", false);
-                List<String> pasosIniciales = Arrays.asList("VACIO", "VACIO", "VACIO", "VACIO");
+                List<String> pasosIniciales = Arrays.asList("1,3", "VACIO", "VACIO", "VACIO");
                 jsonGame.put("paso", objectMapper.valueToTree(pasosIniciales));
                 jsonGame.put("listaPlayers", objectMapper.valueToTree(jugadores));
 
