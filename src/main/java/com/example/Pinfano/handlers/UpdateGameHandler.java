@@ -105,9 +105,12 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 table.putItem(item);
 
                 JSONObject sendData = new JSONObject();
+                sendData.put("type", "gameUpdated");
                 sendData.put("codigoGame", codigoGame);
                 sendData.put("json", gameJson);
                 sendData.put("turno", nuevoTurno);
+
+                new SendJsonHandler().sendUpdateToAll(sendData, context);
 
                 new SendJsonHandler().sendUpdateToAll(sendData, context);
 
@@ -203,9 +206,11 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             // LLAMAR A SENDJSON
             logger.log("[STEP 3] Preparando envío WebSocket vía SendJsonHandler");
             JSONObject sendData = new JSONObject();
+            sendData.put("type", "gameUpdated");
             sendData.put("codigoGame", codigoGame);
             sendData.put("json", gameJson);
             sendData.put("turno", nuevoTurno);
+            new SendJsonHandler().sendUpdateToAll(sendData, context);
             SendJsonHandler sender = new SendJsonHandler();
             sender.sendUpdateToAll(sendData, context);
             logger.log("[SUCCESS] Proceso completo finalizado");
