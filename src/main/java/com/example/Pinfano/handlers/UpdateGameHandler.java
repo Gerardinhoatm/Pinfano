@@ -274,7 +274,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         item.withJSON("json", gameJson.toString());
         table.putItem(item);
         // 7️⃣ Enviar WebSocket
-        enviarWS_RondaTerminada(codigoGame, ganadorEquipo, puntosA, puntosB, gameJson.getInt("mano"), context);
+        enviarWS_RondaTerminada(codigoGame, ganadorEquipo, puntosA, puntosB, gameJson.getInt("mano"),gameJson, context);
         return response(200, gameJson.toString());
     }
     // 🔵 FINALIZAR PARTIDA COMPLETA
@@ -411,6 +411,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int puntosA,
             int puntosB,
             int mano,
+            JSONObject json,
             Context context
     ) {
         JSONObject msg = new JSONObject();
@@ -420,6 +421,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         msg.put("puntosA", puntosA);
         msg.put("puntosB", puntosB);
         msg.put("mano", mano);
+        msg.put("json", json);
         new SendJsonHandler().sendUpdateToAll(msg, context);
     }
     // 🔵 WEBSOCKET: PARTIDA TERMINADA
