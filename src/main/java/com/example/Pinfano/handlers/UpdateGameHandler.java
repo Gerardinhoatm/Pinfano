@@ -111,9 +111,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 sendData.put("turno", nuevoTurno);
 
                 new SendJsonHandler().sendUpdateToAll(sendData, context);
-
-                new SendJsonHandler().sendUpdateToAll(sendData, context);
-
                 return response(200, gameJson.toString());
             }
             // Lógica de fichas
@@ -211,8 +208,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             sendData.put("json", gameJson);
             sendData.put("turno", nuevoTurno);
             new SendJsonHandler().sendUpdateToAll(sendData, context);
-            SendJsonHandler sender = new SendJsonHandler();
-            sender.sendUpdateToAll(sendData, context);
             logger.log("[SUCCESS] Proceso completo finalizado");
             return response(200, gameJson.toString());
         } catch (Exception e) {
