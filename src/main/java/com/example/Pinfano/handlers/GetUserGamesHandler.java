@@ -3,6 +3,8 @@ package com.example.Pinfano.handlers;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.*;
+import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
+import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
@@ -28,6 +30,8 @@ public class GetUserGamesHandler implements RequestHandler<APIGatewayProxyReques
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
 
+        context.getLogger().log("HOLA - Entrando a GetUserGamesHandler");
+
         if ("OPTIONS".equalsIgnoreCase(request.getHttpMethod())) {
             return buildResponse(200, "{}");
         }
@@ -36,12 +40,15 @@ public class GetUserGamesHandler implements RequestHandler<APIGatewayProxyReques
             JsonNode body = objectMapper.readTree(request.getBody());
             String username = body.get("username").asText();
 
+            context.getLogger().log("HOLA - Username recibido: " + username);
+
             Table userT = dynamoDB.getTable(userTable);
             Table gamesT = dynamoDB.getTable(gamesTable);
 
             Item userItem = userT.getItem("username", username);
 
             if (userItem == null) {
+                context.getLogger().log("HOLA - Usuario no encontrado");
                 return buildResponse(404, "{\"message\":\"Usuario no encontrado\"}");
             }
 
@@ -50,15 +57,23 @@ public class GetUserGamesHandler implements RequestHandler<APIGatewayProxyReques
 
             for (Object o : games) {
                 String codigoGame = o.toString();
+                context.getLogger().log("HOLA - Buscando partida: " + codigoGame);
 
-                Item gameItem = gamesT.getItem("codigoGame", codigoGame);
+                // Scan por codigoGame
+                ScanSpec scanSpec = new ScanSpec()
+                        .withFilterExpression("codigoGame = :codigo")
+                        .withValueMap(new ValueMap().withString(":codigo", codigoGame));
+
+                ItemCollection<ScanOutcome> items = gamesT.scan(scanSpec);
 
                 boolean terminado = false;
                 List<String> players = List.of();
 
-                if (gameItem != null) {
+                for (Item gameItem : items) {
                     terminado = gameItem.getBoolean("terminado");
-                    players = gameItem.getList("players");
+                    players = gameItem.getList("listaPlayers");
+                    context.getLogger().log("HOLA - Partida encontrada: " + codigoGame + ", terminado=" + terminado + ", players=" + players);
+                    break;
                 }
 
                 JSONObject obj = new JSONObject();
@@ -73,10 +88,12 @@ public class GetUserGamesHandler implements RequestHandler<APIGatewayProxyReques
             finalJson.put("username", username);
             finalJson.put("games", gamesResponse);
 
+            context.getLogger().log("HOLA - Respuesta final JSON: " + finalJson.toString());
+
             return buildResponse(200, finalJson.toString());
 
         } catch (Exception e) {
-            context.getLogger().log("Error en GetUserGames: " + e.getMessage());
+            context.getLogger().log("HOLA - Error en GetUserGames: " + e.getMessage());
             return buildResponse(500, "{\"message\":\"Error interno\"}");
         }
     }
