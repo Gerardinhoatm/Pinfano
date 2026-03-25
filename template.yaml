@@ -312,6 +312,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: PinfanoUsers
+        - DynamoDBReadPolicy:
+            TableName: PinfanoGames
       Handler: com.example.Pinfano.handlers.GetUserGamesHandler::handleRequest
       Runtime: java17
       MemorySize: 512
