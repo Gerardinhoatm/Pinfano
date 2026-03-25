@@ -37,6 +37,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int fichaFirst = fichaArr.getInt(0);
             int fichaSecond = fichaArr.getInt(1);
             int posicion = body.getInt("posicion");
+
             // Obtener JSON completo desde Dynamo mediante GetGameByCodigo
             logger.log("[INFO] Procesando codigoGame: " + codigoGame + " | Ficha: " + fichaArr + " | Posicion: " + posicion);
             // Obtener JSON completo
@@ -52,9 +53,10 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             JSONObject fullItem = new JSONObject(getRes.getBody());
             String idGame = fullItem.getString("idGame");
             JSONObject gameJson = fullItem.getJSONObject("json");
-            // Actualizar tablero y estado del jugador
             int turnoActual = gameJson.getInt("turno");
             logger.log("[INFO] Turno actual antes de update: " + turnoActual + " | idGame: " + idGame);
+
+            //PASOOOOOO
             if (posicion == -1) {
                 logger.log("[INFO] Jugador PASA el turno");
 
@@ -113,7 +115,8 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 new SendJsonHandler().sendUpdateToAll(sendData, context);
                 return response(200, gameJson.toString());
             }
-            // Lógica de fichas
+
+            // MOVIO FICHA NO PASA
             JSONArray tablero = gameJson.getJSONArray("tablero");
             JSONArray fichasSalidas = gameJson.getJSONArray("fichasSalidas");
             String keyJugador = switch (turnoActual) {
@@ -159,10 +162,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     break;
                 }
             }
-            // CHECK 1: ¿El jugador se quedó sin fichas? → Fin de ronda
-            if (fichasJugador.isEmpty()) {
-                return finalizarRonda(idGame, codigoGame, turnoActual, gameJson, context);
-            }
+
             // Recalcular puntos
             int suma = 0;
             for (int i = 0; i < tablero.length(); i++) {
@@ -175,10 +175,18 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 if (turnoActual == 1 || turnoActual == 3) puntosA += suma;
                 else puntosB += suma;
             }
-            // CHECK 2: ¿Se superó la puntuación límite? → Fin de partida
+
+            // CHECK 1: ¿Se superó la puntuación límite? → Fin de partida
             if (puntosA >= gameJson.getInt("puntos") || puntosB >= gameJson.getInt("puntos")) {
                 return finalizarPartida(idGame, codigoGame, puntosA, puntosB, gameJson, context);
             }
+
+            // CHECK 2: ¿El jugador se quedó sin fichas? → Fin de ronda
+            if (fichasJugador.isEmpty()) {
+                return finalizarRonda(idGame, codigoGame, turnoActual, gameJson, context);
+            }
+
+            //SE JUEGA NORMAL NI FIN DE RONDA NI FIN DE PARTIDA NI PASO
             // Log de eliminación de ficha
             int initialSize = gameJson.getJSONArray(keyJugador).length();
             // ... (Tu bucle for de eliminar ficha)
@@ -217,7 +225,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         }
     }
 
-    // 🔵 FINALIZAR RONDA
+    //FINALIZAR RONDA
     private APIGatewayProxyResponseEvent finalizarRonda(
             String idGame,
             String codigoGame,
@@ -238,8 +246,9 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         else puntosB += puntosRonda;
         gameJson.put("puntosA", puntosA);
         gameJson.put("puntosB", puntosB);
-        // 4️⃣ Resetear estado del JSON para nueva ronda
-        gameJson.put("mano", gameJson.getInt("mano") + 1);
+        // 4️⃣ Resetear estado del JSON para nueva ronda (Ciclo 1, 2, 3, 4 -> 1)
+        int siguienteMano = (gameJson.getInt("mano") % 4) + 1;
+        gameJson.put("mano", siguienteMano);
         // tablero vacío
         JSONArray tableroNuevo = new JSONArray();
         tableroNuevo.put(new JSONArray());
@@ -274,7 +283,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         item.withJSON("json", gameJson.toString());
         table.putItem(item);
         // 7️⃣ Enviar WebSocket
-        enviarWS_RondaTerminada(codigoGame, ganadorEquipo, puntosA, puntosB, gameJson.getInt("mano"),gameJson, context);
+        enviarWS_RondaTerminada(codigoGame, gameJson, context);
         return response(200, gameJson.toString());
     }
     // 🔵 FINALIZAR PARTIDA COMPLETA
@@ -296,7 +305,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         Table table = dynamoDB.getTable(gameTable);
         Item item = table.getItem("idGame", idGame);
         gameJson.put("terminado", true);
-        gameJson.put("estado", "FIN");
         item.withJSON("json", gameJson.toString());
         table.putItem(item);
         try {
@@ -308,7 +316,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         sumarRangoUsuariosDelEquipoGanador(gameJson, ganador, logger);
         return response(200, "{\"fin\":true}");
     }
-    // 🔵 CALCULAR PUNTOS DE UNA RONDA
+    // CALCULAR PUNTOS DE UNA RONDA
     private int calcularPuntosRonda(JSONObject gameJson, LambdaLogger logger) {
         int suma = 0;
         JSONArray j1 = gameJson.getJSONArray("fichasJ1");
@@ -407,20 +415,12 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     // 🔵 WEBSOCKET: RONDA TERMINADA
     private void enviarWS_RondaTerminada(
             String codigoGame,
-            String ganador,
-            int puntosA,
-            int puntosB,
-            int mano,
             JSONObject json,
             Context context
     ) {
         JSONObject msg = new JSONObject();
         msg.put("type", "rondaTerminada");
         msg.put("codigoGame", codigoGame);
-        msg.put("ganador", ganador);
-        msg.put("puntosA", puntosA);
-        msg.put("puntosB", puntosB);
-        msg.put("mano", mano);
         msg.put("json", json);
         new SendJsonHandler().sendUpdateToAll(msg, context);
     }
