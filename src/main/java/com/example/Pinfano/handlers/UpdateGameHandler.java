@@ -305,8 +305,10 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         Table table = dynamoDB.getTable(gameTable);
         Item item = table.getItem("idGame", idGame);
         gameJson.put("terminado", true);
-        item.withJSON("json", gameJson.toString());
-        table.putItem(item);
+        table.putItem(item
+                .withBoolean("terminado", true)
+                .withJSON("json", gameJson.toString())
+        );
         try {
             logger.log("[Partida] TODO OK");
         } catch (Exception e) {
