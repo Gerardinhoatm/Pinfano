@@ -30,430 +30,340 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             if ("OPTIONS".equalsIgnoreCase(event.getHttpMethod())) {
                 return response(200, "OK");
             }
-            logger.log("[INPUT] Body recibido: " + event.getBody());
+
             JSONObject body = new JSONObject(event.getBody());
             String codigoGame = body.getString("codigoGame");
-            JSONArray fichaArr = body.getJSONArray("ficha");
-            int fichaFirst = fichaArr.getInt(0);
-            int fichaSecond = fichaArr.getInt(1);
-            int posicion = body.getInt("posicion");
 
-            // Obtener JSON completo desde Dynamo mediante GetGameByCodigo
-            logger.log("[INFO] Procesando codigoGame: " + codigoGame + " | Ficha: " + fichaArr + " | Posicion: " + posicion);
-            // Obtener JSON completo
+            // Obtener partida
             GetGameByCodigoHandler getHandler = new GetGameByCodigoHandler();
             APIGatewayProxyRequestEvent getReq = new APIGatewayProxyRequestEvent();
             getReq.setHeaders(Map.of("X-codigoGame", codigoGame));
-            logger.log("[STEP 1] Llamando a GetGameByCodigoHandler...");
             APIGatewayProxyResponseEvent getRes = getHandler.handleRequest(getReq, context);
-            if (getRes.getStatusCode() != 200) {
-                logger.log("[ERROR] Partida no encontrada en Dynamo para codigo: " + codigoGame);
-                return error("Partida no encontrada");
-            }
+
+            if (getRes.getStatusCode() != 200) return error("Partida no encontrada");
+
             JSONObject fullItem = new JSONObject(getRes.getBody());
             String idGame = fullItem.getString("idGame");
             JSONObject gameJson = fullItem.getJSONObject("json");
             int turnoActual = gameJson.getInt("turno");
-            logger.log("[INFO] Turno actual antes de update: " + turnoActual + " | idGame: " + idGame);
 
-            //PASOOOOOO
-            if (posicion == -1) {
-                logger.log("[INFO] Jugador PASA el turno");
+            // Determinar si es bot por el nombre en listaPlayers
+            JSONArray listaPlayers = gameJson.getJSONArray("listaPlayers");
+            String nombreActual = listaPlayers.getString(turnoActual - 1);
+            boolean esBot = nombreActual.toLowerCase().contains("bot");
 
-                // 1. Extremos del tablero actual
-                JSONArray tableroActual = gameJson.getJSONArray("tablero");
-                Set<Integer> nuevos = new LinkedHashSet<>();
-
-                for (int i = 0; i < tableroActual.length(); i++) {
-                    nuevos.add(tableroActual.getJSONArray(i).getInt(0));
-                }
-
-                // 2. Recuperar lo que había antes en el paso del jugador
-                JSONArray pasoArr = gameJson.getJSONArray("paso");
-                String anteriorPaso = pasoArr.getString(turnoActual - 1);
-
-                // Convertir lo anterior a Set
-                Set<Integer> anteriores = new LinkedHashSet<>();
-                if (!anteriorPaso.equals("") && !anteriorPaso.equals("VACIO")) {
-                    for (String s : anteriorPaso.split("-")) {
-                        if (!s.isEmpty()) anteriores.add(Integer.parseInt(s));
-                    }
-                }
-
-                // 3. Unir anteriores + nuevos sin duplicados
-                anteriores.addAll(nuevos);
-
-                // 4. Convertir a formato “1-3-4”
-                StringBuilder pasoFinal = new StringBuilder();
-                for (Integer n : anteriores) {
-                    if (pasoFinal.length() > 0) pasoFinal.append("-");
-                    pasoFinal.append(n);
-                }
-
-                // 5. Guardar el resultado
-                pasoArr.put(turnoActual - 1,
-                        pasoFinal.length() == 0 ? "VACIO" : pasoFinal.toString());
-
-                // 6. Avanzar turno
-                int nuevoTurno = (turnoActual % 4) + 1;
-
-                gameJson.put("turno", nuevoTurno);
-                gameJson.put("paso", pasoArr);
-
-                // 7. Guardar en DB y enviar WS
-                Table table = dynamoDB.getTable(gameTable);
-                Item item = table.getItem("idGame", idGame);
-                item.withJSON("json", gameJson.toString());
-                table.putItem(item);
-
-                JSONObject sendData = new JSONObject();
-                sendData.put("type", "gameUpdated");
-                sendData.put("codigoGame", codigoGame);
-                sendData.put("json", gameJson);
-                sendData.put("turno", nuevoTurno);
-
-                new SendJsonHandler().sendUpdateToAll(sendData, context);
-                return response(200, gameJson.toString());
-            }
-
-            // MOVIO FICHA NO PASA
-            JSONArray tablero = gameJson.getJSONArray("tablero");
-            JSONArray fichasSalidas = gameJson.getJSONArray("fichasSalidas");
-            String keyJugador = switch (turnoActual) {
-                case 1 -> "fichasJ1";
-                case 2 -> "fichasBot1";
-                case 3 -> "fichasJ2";
-                default -> "fichasBot2";
-            };
-            logger.log("[INFO] Actualizando fichas de: " + keyJugador);
-            JSONArray fichasJugador = gameJson.getJSONArray(keyJugador);
-            // ORDEN CORRECTO EN TABLERO
-            JSONArray anterior = tablero.getJSONArray(posicion);
-            int extremoAnterior = anterior.getInt(0);
-            int nuevoFirst, nuevoSecond;
-            // ... (Lógica de nuevoFirst/nuevoSecond igual)
-            if (fichaFirst == extremoAnterior) {
-                nuevoFirst = fichaSecond;
-                nuevoSecond = fichaFirst;
-            } else if (fichaSecond == extremoAnterior) {
-                nuevoFirst = fichaFirst;
-                nuevoSecond = fichaSecond;
+            if (esBot) {
+                logger.log("[INFO] Turno de BOT: " + nombreActual);
+                return ejecutarTurnoBot(idGame, codigoGame, gameJson, turnoActual, context);
             } else {
-                // No encaja → pero lo pones igual
-                nuevoFirst = fichaFirst;
-                nuevoSecond = fichaSecond;
-            }
-            JSONArray nuevaFicha = new JSONArray()
-                    .put(nuevoFirst)
-                    .put(nuevoSecond);
-
-            tablero.put(posicion, nuevaFicha);
-            // Guardar ficha en fichasSalidas
-            JSONArray salida = new JSONArray();
-            salida.put(fichaFirst);
-            salida.put(fichaSecond);
-            fichasSalidas.put(salida);
-            // Eliminar ficha del jugador
-            for (int i = 0; i < fichasJugador.length(); i++) {
-                JSONArray f = fichasJugador.getJSONArray(i);
-                if ((f.getInt(0) == fichaFirst && f.getInt(1) == fichaSecond) ||
-                        (f.getInt(0) == fichaSecond && f.getInt(1) == fichaFirst)) {
-                    fichasJugador.remove(i);
-                    break;
+                int posicion = body.getInt("posicion");
+                if (posicion == -1) {
+                    return procesarPasoHumano(idGame, codigoGame, gameJson, turnoActual, context);
+                } else {
+                    JSONArray ficha = body.getJSONArray("ficha");
+                    return procesarJugadaEfectiva(idGame, codigoGame, gameJson, turnoActual, ficha, posicion, context);
                 }
             }
 
-            // Recalcular puntos
-            int suma = 0;
-            for (int i = 0; i < tablero.length(); i++) {
-                JSONArray f = tablero.getJSONArray(i);
-                if (f.getInt(0) >= 0) suma += f.getInt(0);
-            }
-            int puntosA = gameJson.optInt("puntosA");
-            int puntosB = gameJson.optInt("puntosB");
-            if (suma > 0 && suma % 5 == 0) {
-                if (turnoActual == 1 || turnoActual == 3) puntosA += suma;
-                else puntosB += suma;
-            }
-
-            // CHECK 1: ¿Se superó la puntuación límite? → Fin de partida
-            if (puntosA >= gameJson.getInt("puntos") || puntosB >= gameJson.getInt("puntos")) {
-                return finalizarPartida(idGame, codigoGame, puntosA, puntosB, gameJson, context);
-            }
-
-            // CHECK 2: ¿El jugador se quedó sin fichas? → Fin de ronda
-            if (fichasJugador.isEmpty()) {
-                return finalizarRonda(idGame, codigoGame, turnoActual, gameJson, context);
-            }
-
-            //SE JUEGA NORMAL NI FIN DE RONDA NI FIN DE PARTIDA NI PASO
-            // Log de eliminación de ficha
-            int initialSize = gameJson.getJSONArray(keyJugador).length();
-            // ... (Tu bucle for de eliminar ficha)
-            logger.log("[INFO] Fichas del jugador tras eliminar: " + gameJson.getJSONArray(keyJugador).length() + " (Antes: " + initialSize + ")");
-            // Avanzar turno
-            int nuevoTurno = turnoActual + 1;
-            if (nuevoTurno > 4) nuevoTurno = 1;
-            // Actualizar JSON general
-            gameJson.put("tablero", tablero);
-            gameJson.put("fichasSalidas", fichasSalidas);
-            gameJson.put(keyJugador, fichasJugador);
-            gameJson.put("turno", nuevoTurno);
-            gameJson.put("puntosA", puntosA);
-            gameJson.put("puntosB", puntosB);
-            // Guardar en DynamoDB
-            logger.log("[STEP 2] Guardando en DynamoDB table: " + gameTable);
-            Table table = dynamoDB.getTable(gameTable);
-            Item item = table.getItem("idGame", idGame);
-            item.withJSON("json", gameJson.toString());
-            table.putItem(item);
-            logger.log("[SUCCESS] DynamoDB actualizado correctamente");
-            // LLAMAR A SENDJSON
-            logger.log("[STEP 3] Preparando envío WebSocket vía SendJsonHandler");
-            JSONObject sendData = new JSONObject();
-            sendData.put("type", "gameUpdated");
-            sendData.put("codigoGame", codigoGame);
-            sendData.put("json", gameJson);
-            sendData.put("turno", nuevoTurno);
-            new SendJsonHandler().sendUpdateToAll(sendData, context);
-            logger.log("[SUCCESS] Proceso completo finalizado");
-            return response(200, gameJson.toString());
         } catch (Exception e) {
-            logger.log("[FATAL ERROR] Exception: " + e.getMessage());
-            e.printStackTrace();
+            logger.log("[FATAL ERROR]: " + e.getMessage());
             return error(e.getMessage());
         }
     }
 
-    //FINALIZAR RONDA
-    private APIGatewayProxyResponseEvent finalizarRonda(
-            String idGame,
-            String codigoGame,
-            int turnoActual,
-            JSONObject gameJson,
-            Context context
-    ) {
-        var logger = context.getLogger();
-        logger.log("[Ronda] Finalizando ronda por jugador sin fichas");
-        // 1️⃣ Identificar equipo ganador
-        String ganadorEquipo = (turnoActual == 1 || turnoActual == 3) ? "A" : "B";
-        // 2️⃣ Calcular puntos obtenidos en la ronda
-        int puntosRonda = calcularPuntosRonda(gameJson, logger);
-        // 3️⃣ Sumar al equipo ganador
+    private APIGatewayProxyResponseEvent ejecutarTurnoBot(String idGame, String codigoGame, JSONObject gameJson, int turnoActual, Context context) {
+        LambdaLogger logger = context.getLogger();
+        String keyJugador = obtenerKeyFichas(turnoActual);
+        JSONArray fichasBot = gameJson.getJSONArray(keyJugador);
+
+        // 1. Obtener extremos actuales del tablero
+        int[] extremos = obtenerExtremosActuales(gameJson);
+
+        // 2. BACKTRACKING / HEURÍSTICA
+        JugadaOptima mejor = buscarMejorJugada(fichasBot, extremos, gameJson, turnoActual);
+
+        if (mejor != null) {
+            logger.log("[BOT] Decide jugar: " + mejor.ficha + " en posicion " + mejor.posicion);
+            return procesarJugadaEfectiva(idGame, codigoGame, gameJson, turnoActual, mejor.ficha, mejor.posicion, context);
+        } else {
+            logger.log("[BOT] No tiene jugadas, PASA");
+            return procesarPasoHumano(idGame, codigoGame, gameJson, turnoActual, context); // Reutilizamos lógica de paso
+        }
+    }
+
+    private JugadaOptima buscarMejorJugada(JSONArray fichas, int[] extremos, JSONObject gameJson, int turnoBot) {
+        JugadaOptima mejor = null;
+        for (int i = 0; i < fichas.length(); i++) {
+            JSONArray f = fichas.getJSONArray(i);
+            for (int p = 0; p < 4; p++) {
+                if (f.getInt(0) == extremos[p] || f.getInt(1) == extremos[p]) {
+                    int score = calcularHeuristica(f, p, extremos, gameJson, turnoBot);
+                    if (mejor == null || score > mejor.puntuacion) {
+                        mejor = new JugadaOptima(f, p, score);
+                    }
+                }
+            }
+        }
+        return mejor;
+    }
+
+    private int calcularHeuristica(JSONArray ficha, int pos, int[] extremos, JSONObject gameJson, int turnoBot) {
+        int v1 = ficha.getInt(0);
+        int v2 = ficha.getInt(1);
+        int nuevoExtremo = (v1 == extremos[pos]) ? v2 : v1;
+        int score = 0;
+
+        // Prioridad 1: Fastidiar al rival (si el siguiente rival falló a este número)
+        int rivalSig = (turnoBot % 4); // El índice en el array paso es (turno - 1)
+        String historialPasoRival = gameJson.getJSONArray("paso").getString(rivalSig);
+        if (historialPasoRival.contains(String.valueOf(nuevoExtremo))) score += 1000;
+
+        // Prioridad 2: Ayudar compañero (evitar que el compañero falle)
+        int compañeroIdx = (turnoBot + 1) % 4;
+        String historialPasoComp = gameJson.getJSONArray("paso").getString(compañeroIdx);
+        if (historialPasoComp.contains(String.valueOf(nuevoExtremo))) score -= 500;
+
+        // Prioridad 3: Múltiplos de 5
+        int sumaSimulada = nuevoExtremo;
+        for (int i = 0; i < 4; i++) {
+            if (i != pos) sumaSimulada += extremos[i];
+        }
+        if (sumaSimulada % 5 == 0) score += sumaSimulada;
+
+        return score;
+    }
+
+    private APIGatewayProxyResponseEvent procesarJugadaEfectiva(String idGame, String codigoGame, JSONObject gameJson, int turnoActual, JSONArray ficha, int posicion, Context context) {
+        LambdaLogger logger = context.getLogger();
+        JSONArray tablero = gameJson.getJSONArray("tablero");
+        JSONArray fichasSalidas = gameJson.getJSONArray("fichasSalidas");
+        String keyJugador = obtenerKeyFichas(turnoActual);
+        JSONArray fichasJugador = gameJson.getJSONArray(keyJugador);
+
+        // Lógica de orientación de la ficha
+        JSONArray celdaTablero = tablero.getJSONArray(posicion);
+        // Si la celda está vacía, usamos el pinfano como referencia de extremo
+        int extremoAnterior = celdaTablero.length() > 0 ? celdaTablero.getInt(0) : gameJson.getJSONArray("pinfano").getInt(0);
+
+        int f1 = ficha.getInt(0);
+        int f2 = ficha.getInt(1);
+        JSONArray fichaOrientada = (f1 == extremoAnterior) ? new JSONArray().put(f2).put(f1) : new JSONArray().put(f1).put(f2);
+
+        tablero.put(posicion, fichaOrientada);
+        fichasSalidas.put(new JSONArray().put(f1).put(f2));
+
+        // Eliminar de la mano
+        for (int i = 0; i < fichasJugador.length(); i++) {
+            JSONArray f = fichasJugador.getJSONArray(i);
+            if ((f.getInt(0) == f1 && f.getInt(1) == f2) || (f.getInt(0) == f2 && f.getInt(1) == f1)) {
+                fichasJugador.remove(i);
+                break;
+            }
+        }
+
+        // Puntos
+        int suma = 0;
+        for (int i = 0; i < tablero.length(); i++) {
+            JSONArray f = tablero.getJSONArray(i);
+            if (f.length() > 0) suma += f.getInt(0);
+        }
         int puntosA = gameJson.getInt("puntosA");
         int puntosB = gameJson.getInt("puntosB");
-        if (ganadorEquipo.equals("A")) puntosA += puntosRonda;
-        else puntosB += puntosRonda;
-        gameJson.put("puntosA", puntosA);
-        gameJson.put("puntosB", puntosB);
-        // 4️⃣ Resetear estado del JSON para nueva ronda (Ciclo 1, 2, 3, 4 -> 1)
-        int siguienteMano = (gameJson.getInt("mano") % 4) + 1;
-        gameJson.put("mano", siguienteMano);
-        // tablero vacío
-        JSONArray tableroNuevo = new JSONArray();
-        tableroNuevo.put(new JSONArray());
-        tableroNuevo.put(new JSONArray());
-        tableroNuevo.put(new JSONArray());
-        tableroNuevo.put(new JSONArray());
-        gameJson.put("tablero", tableroNuevo);
-        // fichasSalidas vacías
-        gameJson.put("fichasSalidas", new JSONArray());
-        // pinfano vacío → el primer doble que salga se convierte en el nuevo pinfano
-        JSONArray pinfanoArr = new JSONArray();
-        pinfanoArr.put(-1);
-        pinfanoArr.put(-1);
-        gameJson.put("pinfano", pinfanoArr);
-        // paso vacío
-        JSONArray pasoArr = new JSONArray();
-        pasoArr.put("");
-        pasoArr.put("");
-        pasoArr.put("");
-        pasoArr.put("");
-        gameJson.put("paso", pasoArr);
-        // 5️⃣ Reparto nuevo
-        Map<String, JSONArray> nuevas = repartirFichasNuevaRonda();
-        gameJson.put("fichasJ1", nuevas.get("J1"));
-        gameJson.put("fichasBot1", nuevas.get("J2"));
-        gameJson.put("fichasJ2", nuevas.get("J3"));
-        gameJson.put("fichasBot2", nuevas.get("J4"));
-        // 6️⃣ Guardar en DynamoDB
-        logger.log("[Ronda] Guardando nueva ronda en DB");
+        if (suma > 0 && suma % 5 == 0) {
+            if (turnoActual == 1 || turnoActual == 3) puntosA += suma; else puntosB += suma;
+            gameJson.put("puntosA", puntosA);
+            gameJson.put("puntosB", puntosB);
+        }
+
+        // Checks de fin
+        if (puntosA >= gameJson.getInt("puntos") || puntosB >= gameJson.getInt("puntos")) {
+            return finalizarPartida(idGame, codigoGame, puntosA, puntosB, gameJson, context);
+        }
+        if (fichasJugador.isEmpty()) {
+            return finalizarRonda(idGame, codigoGame, turnoActual, gameJson, context);
+        }
+
+        // Turno normal
+        int nuevoTurno = (turnoActual % 4) + 1;
+        gameJson.put("turno", nuevoTurno);
+
+        // Guardar y Notificar
         Table table = dynamoDB.getTable(gameTable);
         Item item = table.getItem("idGame", idGame);
         item.withJSON("json", gameJson.toString());
         table.putItem(item);
-        // 7️⃣ Enviar WebSocket
+
+        JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
+        new SendJsonHandler().sendUpdateToAll(sendData, context);
+
+        return response(200, gameJson.toString());
+    }
+
+    private APIGatewayProxyResponseEvent procesarPasoHumano(String idGame, String codigoGame, JSONObject gameJson, int turnoActual, Context context) {
+        JSONArray tableroActual = gameJson.getJSONArray("tablero");
+        JSONArray pinfano = gameJson.getJSONArray("pinfano");
+        Set<Integer> nuevosExtremos = new LinkedHashSet<>();
+        for (int i = 0; i < 4; i++) {
+            JSONArray f = tableroActual.getJSONArray(i);
+            nuevosExtremos.add(f.length() > 0 ? f.getInt(0) : pinfano.getInt(0));
+        }
+
+        JSONArray pasoArr = gameJson.getJSONArray("paso");
+        String anteriorPaso = pasoArr.getString(turnoActual - 1);
+        Set<Integer> anteriores = new TreeSet<>();
+        if (!anteriorPaso.isEmpty() && !anteriorPaso.equals("VACIO")) {
+            for (String s : anteriorPaso.split("-")) anteriores.add(Integer.parseInt(s));
+        }
+        anteriores.addAll(nuevosExtremos);
+
+        StringBuilder sb = new StringBuilder();
+        for (Integer n : anteriores) {
+            if (sb.length() > 0) sb.append("-");
+            sb.append(n);
+        }
+        pasoArr.put(turnoActual - 1, sb.toString());
+
+        int nuevoTurno = (turnoActual % 4) + 1;
+        gameJson.put("turno", nuevoTurno);
+        gameJson.put("paso", pasoArr);
+
+        dynamoDB.getTable(gameTable).getItem("idGame", idGame).withJSON("json", gameJson.toString());
+        // Reutilizamos el guardado de Dynamo
+        Table table = dynamoDB.getTable(gameTable);
+        Item item = table.getItem("idGame", idGame);
+        item.withJSON("json", gameJson.toString());
+        table.putItem(item);
+
+        JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
+        new SendJsonHandler().sendUpdateToAll(sendData, context);
+        return response(200, gameJson.toString());
+    }
+
+    private int[] obtenerExtremosActuales(JSONObject gameJson) {
+        int[] ex = new int[4];
+        JSONArray tablero = gameJson.getJSONArray("tablero");
+        int pinfanoVal = gameJson.getJSONArray("pinfano").getInt(0);
+        for (int i = 0; i < 4; i++) {
+            JSONArray f = tablero.getJSONArray(i);
+            ex[i] = (f.length() > 0) ? f.getInt(0) : pinfanoVal;
+        }
+        return ex;
+    }
+
+    private String obtenerKeyFichas(int turno) {
+        return switch (turno) {
+            case 1 -> "fichasJ1";
+            case 2 -> "fichasBot1";
+            case 3 -> "fichasJ2";
+            default -> "fichasBot2";
+        };
+    }
+
+    // --- MÉTODOS DE FINALIZACIÓN (Tus métodos originales corregidos) ---
+
+    private APIGatewayProxyResponseEvent finalizarRonda(String idGame, String codigoGame, int turnoActual, JSONObject gameJson, Context context) {
+        String ganadorEquipo = (turnoActual == 1 || turnoActual == 3) ? "A" : "B";
+        int puntosRonda = calcularPuntosRonda(gameJson, context.getLogger());
+        int puntosA = gameJson.getInt("puntosA");
+        int puntosB = gameJson.getInt("puntosB");
+        if (ganadorEquipo.equals("A")) puntosA += puntosRonda; else puntosB += puntosRonda;
+
+        gameJson.put("puntosA", puntosA);
+        gameJson.put("puntosB", puntosB);
+        gameJson.put("mano", (gameJson.getInt("mano") % 4) + 1);
+        gameJson.put("tablero", new JSONArray("[[],[],[],[]]"));
+        gameJson.put("fichasSalidas", new JSONArray());
+        gameJson.put("pinfano", new JSONArray("[-1,-1]"));
+        gameJson.put("paso", new JSONArray("[\"\",\"\",\"\",\"\"]"));
+
+        Map<String, JSONArray> nuevas = repartirFichasNuevaRonda();
+        gameJson.put("fichasJ1", nuevas.get("J1")).put("fichasBot1", nuevas.get("J2"))
+                .put("fichasJ2", nuevas.get("J3")).put("fichasBot2", nuevas.get("J4"));
+
+        Table table = dynamoDB.getTable(gameTable);
+        Item item = table.getItem("idGame", idGame);
+        item.withJSON("json", gameJson.toString());
+        table.putItem(item);
+
         enviarWS_RondaTerminada(codigoGame, gameJson, context);
         return response(200, gameJson.toString());
     }
-    // 🔵 FINALIZAR PARTIDA COMPLETA
-    private APIGatewayProxyResponseEvent finalizarPartida(
-            String idGame,
-            String codigoGame,
-            int puntosA,
-            int puntosB,
-            JSONObject gameJson,
-            Context context
-    ) {
-        var logger = context.getLogger();
-        logger.log("[Partida] Finalizando partida");
-        // 1️⃣ Determinar equipo ganador
-        String ganador = (puntosA > puntosB) ? "A" : "B";
-        // 2️⃣ Enviar WS a todos
-        enviarWS_PartidaTerminada(codigoGame, ganador, puntosA, puntosB, context);
-        // 3️⃣ Marcar partida terminada
-        Table table = dynamoDB.getTable(gameTable);
-        Item item = table.getItem("idGame", idGame);
+
+    private APIGatewayProxyResponseEvent finalizarPartida(String idGame, String codigoGame, int ptsA, int ptsB, JSONObject gameJson, Context context) {
+        String ganador = (ptsA > ptsB) ? "A" : "B";
+        enviarWS_PartidaTerminada(codigoGame, ganador, ptsA, ptsB, context);
         gameJson.put("terminado", true);
-        table.putItem(item
-                .withBoolean("terminado", true)
-                .withJSON("json", gameJson.toString())
-        );
-        try {
-            logger.log("[Partida] TODO OK");
-        } catch (Exception e) {
-            logger.log("[Partida] Error llamando a DeleteGame: " + e.getMessage());
-        }
-        // 5️⃣ Sumar +10 rango a usuarios del equipo ganador
-        sumarRangoUsuariosDelEquipoGanador(gameJson, ganador, logger);
+        Table table = dynamoDB.getTable(gameTable);
+        table.putItem(table.getItem("idGame", idGame).withBoolean("terminado", true).withJSON("json", gameJson.toString()));
+        sumarRangoUsuariosDelEquipoGanador(gameJson, ganador, context.getLogger());
         return response(200, "{\"fin\":true}");
     }
-    // CALCULAR PUNTOS DE UNA RONDA
+
     private int calcularPuntosRonda(JSONObject gameJson, LambdaLogger logger) {
-        int suma = 0;
-        JSONArray j1 = gameJson.getJSONArray("fichasJ1");
-        JSONArray j2 = gameJson.getJSONArray("fichasBot1");
-        JSONArray j3 = gameJson.getJSONArray("fichasJ2");
-        JSONArray j4 = gameJson.getJSONArray("fichasBot2");
-        suma += sumarFichas(j1);
-        suma += sumarFichas(j2);
-        suma += sumarFichas(j3);
-        suma += sumarFichas(j4);
-        // Redondeo a múltiplo de 5
+        int suma = sumarFichas(gameJson.getJSONArray("fichasJ1")) + sumarFichas(gameJson.getJSONArray("fichasBot1")) +
+                sumarFichas(gameJson.getJSONArray("fichasJ2")) + sumarFichas(gameJson.getJSONArray("fichasBot2"));
         int resto = suma % 5;
         if (resto != 0) suma += (5 - resto);
-        logger.log("[Ronda] Puntos sumados = " + suma);
         return suma;
     }
 
     private int sumarFichas(JSONArray arr) {
-        int total = 0;
-        for (int i = 0; i < arr.length(); i++) {
-            JSONArray f = arr.getJSONArray(i);
-            total += f.getInt(0);
-            total += f.getInt(1);
-        }
-        return total;
+        int t = 0;
+        for (int i = 0; i < arr.length(); i++) t += arr.getJSONArray(i).getInt(0) + arr.getJSONArray(i).getInt(1);
+        return t;
     }
-    // 🔵 REPARTIR 28 FICHAS A 4 JUGADORES
+
     private Map<String, JSONArray> repartirFichasNuevaRonda() {
-        List<int[]> fichas = new ArrayList<>();
-        // Generar todas las fichas
-        for (int i = 0; i <= 6; i++) {
-            for (int j = i; j <= 6; j++) {
-                fichas.add(new int[]{i, j});
-            }
-        }
-        // Mezclar
-        Collections.shuffle(fichas);
+        List<int[]> f = new ArrayList<>();
+        for (int i = 0; i <= 6; i++) for (int j = i; j <= 6; j++) f.add(new int[]{i, j});
+        Collections.shuffle(f);
         Map<String, JSONArray> out = new HashMap<>();
-        out.put("J1", new JSONArray());
-        out.put("J2", new JSONArray());
-        out.put("J3", new JSONArray());
-        out.put("J4", new JSONArray());
-
-        // Reparto
-        for (int i = 0; i < 7; i++) out.get("J1").put(new JSONArray(fichas.remove(0)));
-        for (int i = 0; i < 7; i++) out.get("J2").put(new JSONArray(fichas.remove(0)));
-        for (int i = 0; i < 7; i++) out.get("J3").put(new JSONArray(fichas.remove(0)));
-        for (int i = 0; i < 7; i++) out.get("J4").put(new JSONArray(fichas.remove(0)));
-
+        String[] keys = {"J1", "J2", "J3", "J4"};
+        for (String k : keys) {
+            JSONArray a = new JSONArray();
+            for (int i = 0; i < 7; i++) a.put(new JSONArray(f.remove(0)));
+            out.put(k, a);
+        }
         return out;
     }
 
-    // 🔵 SUMAR RANGO A GANADORES
     private void sumarRangoUsuariosDelEquipoGanador(JSONObject gameJson, String ganador, LambdaLogger logger) {
         try {
             JSONArray players = gameJson.getJSONArray("listaPlayers");
-
-            // jugadores: [J1, J2, J3, J4]
-            List<String> equipo = new ArrayList<>();
-
-            if (ganador.equals("A")) {
-                equipo.add(players.getString(0)); // J1
-                equipo.add(players.getString(2)); // J3
-            } else {
-                equipo.add(players.getString(1)); // J2
-                equipo.add(players.getString(3)); // J4
+            List<Integer> indices = ganador.equals("A") ? Arrays.asList(0, 2) : Arrays.asList(1, 3);
+            for (int i : indices) {
+                String u = players.getString(i);
+                if (!u.equalsIgnoreCase("bot")) actualizarRangoUsuario(u, logger);
             }
-
-            for (String user : equipo) {
-                if (!user.equalsIgnoreCase("bot")) {
-                    actualizarRangoUsuario(user, logger);
-                }
-            }
-
-        } catch (Exception e) {
-            logger.log("[Rango] ERROR: " + e.getMessage());
-        }
+        } catch (Exception e) { logger.log("Error rango: " + e.getMessage()); }
     }
+
     private void actualizarRangoUsuario(String username, LambdaLogger logger) {
         try {
             Table t = dynamoDB.getTable("PinfanoUsers");
             Item usr = t.getItem("username", username);
-
-            int rango = usr.getInt("rango");
-            rango += 10;
-
-            usr.withInt("rango", rango);
-            t.putItem(usr);
-
-            logger.log("[Rango] +" + username);
-
-        } catch (Exception e) {
-            logger.log("[Rango] ERROR actualizando: " + e.getMessage());
-        }
+            if (usr != null) t.putItem(usr.withInt("rango", usr.getInt("rango") + 10));
+        } catch (Exception e) { logger.log("Error actualizando usuario: " + e.getMessage()); }
     }
-    // 🔵 WEBSOCKET: RONDA TERMINADA
-    private void enviarWS_RondaTerminada(
-            String codigoGame,
-            JSONObject json,
-            Context context
-    ) {
-        JSONObject msg = new JSONObject();
-        msg.put("type", "rondaTerminada");
-        msg.put("codigoGame", codigoGame);
-        msg.put("json", json);
-        new SendJsonHandler().sendUpdateToAll(msg, context);
-    }
-    // 🔵 WEBSOCKET: PARTIDA TERMINADA
-    private void enviarWS_PartidaTerminada(
-            String codigoGame,
-            String ganador,
-            int puntosA,
-            int puntosB,
-            Context context
-    ) {
-        JSONObject msg = new JSONObject();
-        msg.put("type", "partidaTerminada");
-        msg.put("codigoGame", codigoGame);
-        msg.put("ganador", ganador);
-        msg.put("puntosA", puntosA);
-        msg.put("puntosB", puntosB);
 
-        new SendJsonHandler().sendUpdateToAll(msg, context);
+    private void enviarWS_RondaTerminada(String cod, JSONObject json, Context ctx) {
+        new SendJsonHandler().sendUpdateToAll(new JSONObject().put("type", "rondaTerminada").put("codigoGame", cod).put("json", json), ctx);
     }
+
+    private void enviarWS_PartidaTerminada(String cod, String gan, int pA, int pB, Context ctx) {
+        new SendJsonHandler().sendUpdateToAll(new JSONObject().put("type", "partidaTerminada").put("codigoGame", cod).put("ganador", gan).put("puntosA", pA).put("puntosB", pB), ctx);
+    }
+
     private APIGatewayProxyResponseEvent response(int code, String body) {
-        return new APIGatewayProxyResponseEvent()
-                .withStatusCode(code)
-                .withHeaders(Map.of(
-                        "Access-Control-Allow-Origin", "*",
-                        "Access-Control-Allow-Headers", "*"
-                ))
-                .withBody(body);
+        return new APIGatewayProxyResponseEvent().withStatusCode(code).withHeaders(Map.of("Access-Control-Allow-Origin", "*", "Access-Control-Allow-Headers", "*")).withBody(body);
     }
 
     private APIGatewayProxyResponseEvent error(String msg) {
         return response(400, "{\"error\":\"" + msg + "\"}");
+    }
+
+    private static class JugadaOptima {
+        JSONArray ficha; int posicion; int puntuacion;
+        JugadaOptima(JSONArray f, int p, int s) { this.ficha = f; this.posicion = p; this.puntuacion = s; }
     }
 }
