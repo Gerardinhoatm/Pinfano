@@ -46,17 +46,10 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             String idGame = fullItem.getString("idGame");
             JSONObject gameJson = fullItem.getJSONObject("json");
             int turnoActual = gameJson.getInt("turno");
-
-            // Determinar si es bot por el nombre en listaPlayers
-            JSONArray listaPlayers = gameJson.getJSONArray("listaPlayers");
-            String nombreActual = listaPlayers.getString(turnoActual - 1);
-            boolean esBot = nombreActual.toLowerCase().contains("bot");
-
-            if (esBot) {
-                logger.log("[INFO] Turno de BOT: " + nombreActual);
+            int posicion = body.getInt("posicion");
+            if (posicion == -2) {
                 return ejecutarTurnoBot(idGame, codigoGame, gameJson, turnoActual, context);
             } else {
-                int posicion = body.getInt("posicion");
                 if (posicion == -1) {
                     return procesarPasoHumano(idGame, codigoGame, gameJson, turnoActual, context);
                 } else {
@@ -64,7 +57,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                     return procesarJugadaEfectiva(idGame, codigoGame, gameJson, turnoActual, ficha, posicion, context);
                 }
             }
-
         } catch (Exception e) {
             logger.log("[FATAL ERROR]: " + e.getMessage());
             return error(e.getMessage());
