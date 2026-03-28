@@ -44,7 +44,15 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
             JSONObject fullItem = new JSONObject(getRes.getBody());
             String idGame = fullItem.getString("idGame");
-            JSONObject gameJson = fullItem.getJSONObject("json");
+
+            // Cambia la línea problemática por esto:
+            Object jsonRaw = fullItem.get("json");
+            JSONObject gameJson;
+            if (jsonRaw instanceof String) {
+                gameJson = new JSONObject((String) jsonRaw);
+            } else {
+                gameJson = (JSONObject) jsonRaw;
+            }
             int turnoActual = gameJson.getInt("turno");
             int posicion = body.getInt("posicion");
             if (posicion == -2) {
