@@ -6,20 +6,18 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2WebSocketEvent;
 
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Item;
-import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.document.ItemCollection;
+import com.amazonaws.services.dynamodbv2.document.*;
 import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
+import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 
 import com.amazonaws.services.apigatewaymanagementapi.AmazonApiGatewayManagementApi;
 import com.amazonaws.services.apigatewaymanagementapi.AmazonApiGatewayManagementApiClientBuilder;
 import com.amazonaws.services.apigatewaymanagementapi.model.PostToConnectionRequest;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.List;
 
 public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSocketEvent, Object> {
@@ -32,61 +30,81 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
 
     @Override
     public Object handleRequest(APIGatewayV2WebSocketEvent event, Context context) {
-
-        String connectionId = event.getRequestContext().getConnectionId();
-        context.getLogger().log("🔗 Player joined: " + connectionId);
-
         String body = event.getBody();
-        String username = "";
         String codigoGame = "";
 
         try {
             JSONObject json = new JSONObject(body);
-            username = json.getString("username");
             codigoGame = json.getString("codigoGame");
         } catch (Exception e) {
             context.getLogger().log("❌ Error parsing JSON: " + e.getMessage());
+            return null;
         }
 
-        Table connectionsTable = dynamo.getTable(CONNECTIONS_TABLE);
         Table gamesTable = dynamo.getTable(GAMES_TABLE);
-
-        List<String> targetConnections = new ArrayList<>();
-        int connectedPlayers = 0;
+        Table connectionsTable = dynamo.getTable(CONNECTIONS_TABLE);
 
         try {
-            ScanSpec scanSpec = new ScanSpec().withConsistentRead(true);
-            ItemCollection<?> allItems = connectionsTable.scan(scanSpec);
+            // 1. BUSCAR LA PARTIDA EN PinfanoGames POR codigoGame
+            Item gameItem = null;
+            ItemCollection<ScanOutcome> items = gamesTable.scan(new ScanSpec()
+                    .withFilterExpression("codigoGame = :cg")
+                    .withValueMap(new ValueMap().withString(":cg", codigoGame)));
 
-            for (Item item : allItems) {
-                String gameCode = item.getString("codigoGame");
-                if (codigoGame.equals(gameCode)) {
-                    targetConnections.add(item.getString("connectionId"));
-                    connectedPlayers++;
+            for (Item item : items) {
+                gameItem = item;
+                break;
+            }
+
+            if (gameItem == null) {
+                context.getLogger().log("⚠️ Partida no encontrada: " + codigoGame);
+                return null;
+            }
+
+            // 2. LOGICA DE CONTEO: Jugadores que no son VACIO ni BOT
+            List<Object> listaPlayersRaw = gameItem.getList("listaPlayers");
+            int unidos = 0;
+            for (Object p : listaPlayersRaw) {
+                String pStr = p.toString();
+                if (pStr.contains("S=")) pStr = ((java.util.Map<?,?>)p).get("S").toString();
+
+                if (!pStr.equalsIgnoreCase("VACIO") && !pStr.toUpperCase().startsWith("BOT")) {
+                    unidos++;
                 }
             }
 
-        } catch (Exception e) {
-            context.getLogger().log("❌ Error scanning connections table: " + e.getMessage());
-        }
-        int maxPlayers = 4;
-        try {
-            Item gameItem = gamesTable.getItem("codigoGame", codigoGame);
+            int maxPlayers = gameItem.getInt("numJugadores");
+            String estado = gameItem.getString("estado"); // "P" (Pendiente) o "A" (Activo/Lleno)
 
-            if (gameItem != null && gameItem.isPresent("numJugadores")) {
-                maxPlayers = gameItem.getInt("numJugadores");
+            // 3. PREPARAR EL MENSAJE JSON
+            JSONObject msgJson = new JSONObject();
+
+            if ("A".equals(estado)) {
+                // PARTIDA LLENA: Mandamos a jugar
+                msgJson.put("type", "startGame");
+
+                // Extraer el turno desde el campo 'json' interno
+                String jsonAttr = gameItem.getString("json");
+                JSONObject innerJson = new JSONObject(jsonAttr);
+                msgJson.put("turno", innerJson.optInt("turno", 1));
+
+                // Enviamos la lista para que Android calcule su propio índice (playerIndex)
+                JSONArray playersArray = new JSONArray();
+                for (Object p : listaPlayersRaw) {
+                    String pStr = p.toString();
+                    if (pStr.contains("S=")) pStr = ((java.util.Map<?,?>)p).get("S").toString();
+                    playersArray.put(pStr);
+                }
+                msgJson.put("listaPlayers", playersArray);
+
+            } else {
+                // PARTIDA PENDIENTE: Solo actualizar contador
+                msgJson.put("type", "playerJoined");
+                msgJson.put("connectedPlayers", unidos);
+                msgJson.put("maxPlayers", maxPlayers);
             }
 
-        } catch (Exception e) {
-            context.getLogger().log("❌ Error reading game item: " + e.getMessage());
-        }
-        try {
-            JSONObject msgJson = new JSONObject();
-            msgJson.put("type", "playerJoined");
-            msgJson.put("username", username);
-            msgJson.put("connectedPlayers", connectedPlayers);
-            msgJson.put("maxPlayers", maxPlayers);
-
+            // 4. ENVIAR A TODAS LAS CONEXIONES SUSCRITAS A ESTE CÓDIGO
             AmazonApiGatewayManagementApi apiGatewayClient = AmazonApiGatewayManagementApiClientBuilder.standard()
                     .withEndpointConfiguration(
                             new AmazonApiGatewayManagementApiClientBuilder.EndpointConfiguration(
@@ -95,19 +113,23 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
                             )
                     ).build();
 
-            for (String target : targetConnections) {
+            ItemCollection<ScanOutcome> subscribers = connectionsTable.scan(new ScanSpec()
+                    .withFilterExpression("codigoGame = :cg")
+                    .withValueMap(new ValueMap().withString(":cg", codigoGame)));
+
+            for (Item conn : subscribers) {
+                String targetId = conn.getString("connectionId");
                 try {
-                    PostToConnectionRequest request = new PostToConnectionRequest()
-                            .withConnectionId(target)
-                            .withData(ByteBuffer.wrap(msgJson.toString().getBytes()));
-                    apiGatewayClient.postToConnection(request);
+                    apiGatewayClient.postToConnection(new PostToConnectionRequest()
+                            .withConnectionId(targetId)
+                            .withData(ByteBuffer.wrap(msgJson.toString().getBytes())));
                 } catch (Exception e) {
-                    context.getLogger().log("❌ Error sending to " + target + ": " + e.getMessage());
+                    context.getLogger().log("❌ Error enviando a " + targetId + ": " + e.getMessage());
                 }
             }
 
         } catch (Exception e) {
-            context.getLogger().log("❌ Error creating JSON: " + e.getMessage());
+            context.getLogger().log("❌ Error crítico en handler: " + e.getMessage());
         }
 
         return null;
