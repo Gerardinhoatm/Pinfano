@@ -30,7 +30,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             if ("OPTIONS".equalsIgnoreCase(event.getHttpMethod())) {
                 return response(200, "OK");
             }
-
             JSONObject body = new JSONObject(event.getBody());
             String codigoGame = body.getString("codigoGame");
 
