@@ -55,12 +55,16 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             int turnoActual = gameJson.getInt("turno");
             int posicion = body.getInt("posicion");
             if (posicion == -2) {
+                logger.log("Turno del bot");
                 return ejecutarTurnoBot(idGame, codigoGame, gameJson, turnoActual, context);
             } else {
+                logger.log("Turno del humano");
                 if (posicion == -1) {
+                    logger.log("Turno del humano pasa");
                     return procesarPasoHumano(idGame, codigoGame, gameJson, turnoActual, context);
                 } else {
                     JSONArray ficha = body.getJSONArray("ficha");
+                    logger.log("Turno del humano juega la ficha: " + ficha);
                     return procesarJugadaEfectiva(idGame, codigoGame, gameJson, turnoActual, ficha, posicion, context);
                 }
             }
@@ -80,11 +84,9 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         // 2. BACKTRACKING / HEURÍSTICA
         JugadaOptima mejor = buscarMejorJugada(fichasBot, extremos, gameJson, turnoActual);
-
+        logger.log("[BOT] Decide jugar: " + mejor.ficha + " en posicion " + mejor.posicion);
         if (mejor != null) {
-            logger.log("[BOT] Decide jugar: " + mejor.ficha + " en posicion " + mejor.posicion);
-
-            // Convertimos JSONArray → JSONArray real como la espera procesarJugadaEfectiva
+                        // Convertimos JSONArray → JSONArray real como la espera procesarJugadaEfectiva
             JSONArray fichaElegida = new JSONArray()
                     .put(mejor.ficha.getInt(0))
                     .put(mejor.ficha.getInt(1));
