@@ -84,11 +84,24 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         if (mejor != null) {
             logger.log("[BOT] Decide jugar: " + mejor.ficha + " en posicion " + mejor.posicion);
-            return procesarJugadaEfectiva(idGame, codigoGame, gameJson, turnoActual, mejor.ficha, mejor.posicion, context);
-        } else {
-            logger.log("[BOT] No tiene jugadas, PASA");
-            return procesarPasoHumano(idGame, codigoGame, gameJson, turnoActual, context); // Reutilizamos lógica de paso
+
+            // Convertimos JSONArray → JSONArray real como la espera procesarJugadaEfectiva
+            JSONArray fichaElegida = new JSONArray()
+                    .put(mejor.ficha.getInt(0))
+                    .put(mejor.ficha.getInt(1));
+
+            return procesarJugadaEfectiva(
+                    idGame,
+                    codigoGame,
+                    gameJson,
+                    turnoActual,
+                    fichaElegida,
+                    mejor.posicion,
+                    context
+            );
         }
+        logger.log("[BOT] No tiene jugadas, PASA");
+        return procesarPasoHumano(idGame, codigoGame, gameJson, turnoActual, context);
     }
 
     private JugadaOptima buscarMejorJugada(JSONArray fichas, int[] extremos, JSONObject gameJson, int turnoBot) {
