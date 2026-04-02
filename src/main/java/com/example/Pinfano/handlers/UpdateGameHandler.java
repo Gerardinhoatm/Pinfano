@@ -210,7 +210,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
         new SendJsonHandler().sendUpdateToAll(sendData, context);
-
+        try { Thread.sleep(4000); } catch (InterruptedException ignored) {}
         if (siguienteEsBot(gameJson)) {
             logger.log("El siguiente es BOT, ejecutando turno automáticamente...");
             return ejecutarTurnoBot(idGame, codigoGame, gameJson, nuevoTurno, context);
@@ -257,7 +257,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
         new SendJsonHandler().sendUpdateToAll(sendData, context);
-
+        try { Thread.sleep(4000); } catch (InterruptedException ignored) {}
         if (siguienteEsBot(gameJson)) {
             return ejecutarTurnoBot(idGame, codigoGame, gameJson, nuevoTurno, context);
         } else {
