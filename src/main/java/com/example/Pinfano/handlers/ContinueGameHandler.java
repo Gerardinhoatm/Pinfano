@@ -58,9 +58,6 @@ public class ContinueGameHandler implements RequestHandler<APIGatewayProxyReques
             Item game = iterator.next();
             context.getLogger().log("[CONTINUE] Partida encontrada: " + game.toJSON() + "\n");
 
-            // Convertimos el item completo a JSON
-            String jsonGame = game.toJSON();
-
             // --- Sacar listaPlayers ---
             List<Object> players = game.getList("listaPlayers");
             context.getLogger().log("[CONTINUE] listaPlayers: " + players + "\n");

@@ -31,7 +31,7 @@ public class SendPlayerJoinedHandler implements RequestHandler<APIGatewayV2WebSo
     @Override
     public Object handleRequest(APIGatewayV2WebSocketEvent event, Context context) {
         String body = event.getBody();
-        String codigoGame = "";
+        String codigoGame;
 
         try {
             JSONObject json = new JSONObject(body);

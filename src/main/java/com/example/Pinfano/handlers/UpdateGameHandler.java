@@ -84,9 +84,9 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         // 2. BACKTRACKING / HEURÍSTICA
         JugadaOptima mejor = buscarMejorJugada(fichasBot, extremos, gameJson, turnoActual);
-        logger.log("[BOT] Decide jugar: " + mejor.ficha + " en posicion " + mejor.posicion);
         if (mejor != null) {
-                        // Convertimos JSONArray → JSONArray real como la espera procesarJugadaEfectiva
+            // Convertimos JSONArray → JSONArray real como la espera procesarJugadaEfectiva
+            logger.log("[BOT] Decide jugar: " + mejor.ficha + " en posicion " + mejor.posicion);
             JSONArray fichaElegida = new JSONArray()
                     .put(mejor.ficha.getInt(0))
                     .put(mejor.ficha.getInt(1));
@@ -133,8 +133,8 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         if (historialPasoRival.contains(String.valueOf(nuevoExtremo))) score += 1000;
 
         // Prioridad 2: Ayudar compañero (evitar que el compañero falle)
-        int compañeroIdx = (turnoBot + 1) % 4;
-        String historialPasoComp = gameJson.getJSONArray("paso").getString(compañeroIdx);
+        int companeroIdx = (turnoBot + 1) % 4;
+        String historialPasoComp = gameJson.getJSONArray("paso").getString(companeroIdx);
         if (historialPasoComp.contains(String.valueOf(nuevoExtremo))) score -= 500;
 
         // Prioridad 3: Múltiplos de 5
@@ -157,7 +157,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         // Lógica de orientación de la ficha
         JSONArray celdaTablero = tablero.getJSONArray(posicion);
         // Si la celda está vacía, usamos el pinfano como referencia de extremo
-        int extremoAnterior = celdaTablero.length() > 0 ? celdaTablero.getInt(0) : gameJson.getJSONArray("pinfano").getInt(0);
+        int extremoAnterior = !celdaTablero.isEmpty() ? celdaTablero.getInt(0) : gameJson.getJSONArray("pinfano").getInt(0);
 
         int f1 = ficha.getInt(0);
         int f2 = ficha.getInt(1);
@@ -179,12 +179,13 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         int suma = 0;
         for (int i = 0; i < tablero.length(); i++) {
             JSONArray f = tablero.getJSONArray(i);
-            if (f.length() > 0) suma += f.getInt(0);
+            if (!f.isEmpty()) suma += f.getInt(0);
         }
         int puntosA = gameJson.getInt("puntosA");
         int puntosB = gameJson.getInt("puntosB");
         if (suma > 0 && suma % 5 == 0) {
-            if (turnoActual == 1 || turnoActual == 3) puntosA += suma; else puntosB += suma;
+            if (turnoActual == 1 || turnoActual == 3) puntosA += suma;
+            else puntosB += suma;
             gameJson.put("puntosA", puntosA);
             gameJson.put("puntosB", puntosB);
         }
@@ -210,13 +211,13 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
         new SendJsonHandler().sendUpdateToAll(sendData, context);
 
-        // Después de guardar Dynamo y mandar WS a todos
         if (siguienteEsBot(gameJson)) {
-            return llamarRecursivamenteAlBot(idGame, context);
+            logger.log("El siguiente es BOT, ejecutando turno automáticamente...");
+            return ejecutarTurnoBot(idGame, codigoGame, gameJson, nuevoTurno, context);
+        } else {
+            logger.log("El siguiente es Humano, devolviendo control al front.");
+            return response(200, gameJson.toString());
         }
-
-        // Si el siguiente es humano → devolvemos la partida al front
-        return response(200, gameJson.toString());
     }
 
     private APIGatewayProxyResponseEvent procesarPasoHumano(String idGame, String codigoGame, JSONObject gameJson, int turnoActual, Context context) {
@@ -225,7 +226,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         Set<Integer> nuevosExtremos = new LinkedHashSet<>();
         for (int i = 0; i < 4; i++) {
             JSONArray f = tableroActual.getJSONArray(i);
-            nuevosExtremos.add(f.length() > 0 ? f.getInt(0) : pinfano.getInt(0));
+            nuevosExtremos.add(!f.isEmpty() ? f.getInt(0) : pinfano.getInt(0));
         }
 
         JSONArray pasoArr = gameJson.getJSONArray("paso");
@@ -238,7 +239,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         StringBuilder sb = new StringBuilder();
         for (Integer n : anteriores) {
-            if (sb.length() > 0) sb.append("-");
+            if (!sb.isEmpty()) sb.append("-");
             sb.append(n);
         }
         pasoArr.put(turnoActual - 1, sb.toString());
@@ -256,12 +257,12 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
         new SendJsonHandler().sendUpdateToAll(sendData, context);
-        // 🔥 Si el siguiente es bot → recursión
-        if (siguienteEsBot(gameJson)) {
-            return llamarRecursivamenteAlBot(idGame, context);
-        }
 
-        return response(200, gameJson.toString());
+        if (siguienteEsBot(gameJson)) {
+            return ejecutarTurnoBot(idGame, codigoGame, gameJson, nuevoTurno, context);
+        } else {
+            return response(200, gameJson.toString());
+        }
     }
 
     private int[] obtenerExtremosActuales(JSONObject gameJson) {
@@ -270,7 +271,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         int pinfanoVal = gameJson.getJSONArray("pinfano").getInt(0);
         for (int i = 0; i < 4; i++) {
             JSONArray f = tablero.getJSONArray(i);
-            ex[i] = (f.length() > 0) ? f.getInt(0) : pinfanoVal;
+            ex[i] = (!f.isEmpty()) ? f.getInt(0) : pinfanoVal;
         }
         return ex;
     }
@@ -287,10 +288,11 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     // --- MÉTODOS DE FINALIZACIÓN (Tus métodos originales corregidos) ---
     private APIGatewayProxyResponseEvent finalizarRonda(String idGame, String codigoGame, int turnoActual, JSONObject gameJson, Context context) {
         String ganadorEquipo = (turnoActual == 1 || turnoActual == 3) ? "A" : "B";
-        int puntosRonda = calcularPuntosRonda(gameJson, context.getLogger());
+        int puntosRonda = calcularPuntosRonda(gameJson);
         int puntosA = gameJson.getInt("puntosA");
         int puntosB = gameJson.getInt("puntosB");
-        if (ganadorEquipo.equals("A")) puntosA += puntosRonda; else puntosB += puntosRonda;
+        if (ganadorEquipo.equals("A")) puntosA += puntosRonda;
+        else puntosB += puntosRonda;
 
         gameJson.put("puntosA", puntosA);
         gameJson.put("puntosB", puntosB);
@@ -323,7 +325,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         return response(200, "{\"fin\":true}");
     }
 
-    private int calcularPuntosRonda(JSONObject gameJson, LambdaLogger logger) {
+    private int calcularPuntosRonda(JSONObject gameJson) {
         int suma = sumarFichas(gameJson.getJSONArray("fichasJ1")) + sumarFichas(gameJson.getJSONArray("fichasBot1")) +
                 sumarFichas(gameJson.getJSONArray("fichasJ2")) + sumarFichas(gameJson.getJSONArray("fichasBot2"));
         int resto = suma % 5;
@@ -359,7 +361,9 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 String u = players.getString(i);
                 if (!u.equalsIgnoreCase("bot")) actualizarRangoUsuario(u, logger);
             }
-        } catch (Exception e) { logger.log("Error rango: " + e.getMessage()); }
+        } catch (Exception e) {
+            logger.log("Error rango: " + e.getMessage());
+        }
     }
 
     private void actualizarRangoUsuario(String username, LambdaLogger logger) {
@@ -367,7 +371,9 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             Table t = dynamoDB.getTable("PinfanoUsers");
             Item usr = t.getItem("username", username);
             if (usr != null) t.putItem(usr.withInt("rango", usr.getInt("rango") + 10));
-        } catch (Exception e) { logger.log("Error actualizando usuario: " + e.getMessage()); }
+        } catch (Exception e) {
+            logger.log("Error actualizando usuario: " + e.getMessage());
+        }
     }
 
     private void enviarWS_RondaTerminada(String cod, JSONObject json, Context ctx) {
@@ -387,8 +393,15 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     }
 
     private static class JugadaOptima {
-        JSONArray ficha; int posicion; int puntuacion;
-        JugadaOptima(JSONArray f, int p, int s) { this.ficha = f; this.posicion = p; this.puntuacion = s; }
+        JSONArray ficha;
+        int posicion;
+        int puntuacion;
+
+        JugadaOptima(JSONArray f, int p, int s) {
+            this.ficha = f;
+            this.posicion = p;
+            this.puntuacion = s;
+        }
     }
 
     private boolean siguienteEsBot(JSONObject gameJson) {
@@ -396,20 +409,5 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         JSONArray players = gameJson.getJSONArray("listaPlayers");
         String jugador = players.getString(turno - 1);
         return jugador.toLowerCase().contains("bot");
-    }
-
-    private APIGatewayProxyResponseEvent llamarRecursivamenteAlBot(
-            String codigoGame,
-            Context context
-    ) {
-        JSONObject fakeBody = new JSONObject();
-        fakeBody.put("codigoGame", codigoGame);
-        fakeBody.put("posicion", -2);
-        fakeBody.put("ficha", new JSONArray().put(-2).put(-2));
-
-        APIGatewayProxyRequestEvent req = new APIGatewayProxyRequestEvent();
-        req.setBody(fakeBody.toString());
-
-        return handleRequest(req, context);
     }
 }

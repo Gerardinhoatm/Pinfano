@@ -44,7 +44,7 @@ public class RegisterHandler implements RequestHandler<APIGatewayProxyRequestEve
             String email = body.has("email") ? body.get("email").asText() : "";
             int age = body.has("age") ? body.get("age").asInt() : 0;
             int rango = body.has("rango") ? body.get("rango").asInt() : 0;
-            Boolean logIn = body.has("logIn") ? body.get("logIn").asBoolean(): false;
+            boolean logIn = body.has("logIn") && body.get("logIn").asBoolean();
             JsonNode gamesNode = body.has("games") ? body.get("games") : objectMapper.createArrayNode();
 
 

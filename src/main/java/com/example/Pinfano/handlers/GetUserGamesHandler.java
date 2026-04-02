@@ -88,7 +88,7 @@ public class GetUserGamesHandler implements RequestHandler<APIGatewayProxyReques
             finalJson.put("username", username);
             finalJson.put("games", gamesResponse);
 
-            context.getLogger().log("HOLA - Respuesta final JSON: " + finalJson.toString());
+            context.getLogger().log("HOLA - Respuesta final JSON: " + finalJson);
 
             return buildResponse(200, finalJson.toString());
 
