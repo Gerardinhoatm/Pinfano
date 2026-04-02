@@ -190,14 +190,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             gameJson.put("puntosB", puntosB);
         }
 
-        // Checks de fin
-        if (puntosA >= gameJson.getInt("puntos") || puntosB >= gameJson.getInt("puntos")) {
-            return finalizarPartida(idGame, codigoGame, puntosA, puntosB, gameJson, context);
-        }
-        if (fichasJugador.isEmpty()) {
-            return finalizarRonda(idGame, codigoGame, turnoActual, gameJson, context);
-        }
-
         // Turno normal
         int nuevoTurno = (turnoActual % 4) + 1;
         gameJson.put("turno", nuevoTurno);
@@ -208,8 +200,17 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         item.withJSON("json", gameJson.toString());
         table.putItem(item);
 
+        // Checks de fin
+        if (puntosA >= gameJson.getInt("puntos") || puntosB >= gameJson.getInt("puntos")) {
+            return finalizarPartida(idGame, codigoGame, puntosA, puntosB, gameJson, context);
+        }
+        if (fichasJugador.isEmpty()) {
+            return finalizarRonda(idGame, codigoGame, turnoActual, gameJson, context);
+        }
+
         JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
         new SendJsonHandler().sendUpdateToAll(sendData, context);
+
         try { Thread.sleep(4000); } catch (InterruptedException ignored) {}
         if (siguienteEsBot(gameJson)) {
             logger.log("El siguiente es BOT, ejecutando turno automáticamente...");
@@ -286,6 +287,16 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     }
 
     // --- MÉTODOS DE FINALIZACIÓN (Tus métodos originales corregidos) ---
+    private APIGatewayProxyResponseEvent finalizarPartida(String idGame, String codigoGame, int ptsA, int ptsB, JSONObject gameJson, Context context) {
+        String ganador = (ptsA > ptsB) ? "A" : "B";
+        enviarWS_PartidaTerminada(codigoGame, ganador, ptsA, ptsB, context);
+        gameJson.put("terminado", true);
+        Table table = dynamoDB.getTable(gameTable);
+        table.putItem(table.getItem("idGame", idGame).withBoolean("terminado", true).withJSON("json", gameJson.toString()));
+        sumarRangoUsuariosDelEquipoGanador(gameJson, ganador, context.getLogger());
+        return response(200, "{\"fin\":true}");
+    }
+
     private APIGatewayProxyResponseEvent finalizarRonda(String idGame, String codigoGame, int turnoActual, JSONObject gameJson, Context context) {
         String ganadorEquipo = (turnoActual == 1 || turnoActual == 3) ? "A" : "B";
         int puntosRonda = calcularPuntosRonda(gameJson);
@@ -313,16 +324,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         enviarWS_RondaTerminada(codigoGame, gameJson, context);
         return response(200, gameJson.toString());
-    }
-
-    private APIGatewayProxyResponseEvent finalizarPartida(String idGame, String codigoGame, int ptsA, int ptsB, JSONObject gameJson, Context context) {
-        String ganador = (ptsA > ptsB) ? "A" : "B";
-        enviarWS_PartidaTerminada(codigoGame, ganador, ptsA, ptsB, context);
-        gameJson.put("terminado", true);
-        Table table = dynamoDB.getTable(gameTable);
-        table.putItem(table.getItem("idGame", idGame).withBoolean("terminado", true).withJSON("json", gameJson.toString()));
-        sumarRangoUsuariosDelEquipoGanador(gameJson, ganador, context.getLogger());
-        return response(200, "{\"fin\":true}");
     }
 
     private int calcularPuntosRonda(JSONObject gameJson) {
