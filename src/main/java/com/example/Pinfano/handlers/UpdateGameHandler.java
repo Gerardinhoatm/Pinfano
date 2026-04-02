@@ -305,9 +305,16 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         if (ganadorEquipo.equals("A")) puntosA += puntosRonda;
         else puntosB += puntosRonda;
 
+
         gameJson.put("puntosA", puntosA);
         gameJson.put("puntosB", puntosB);
-        gameJson.put("mano", (gameJson.getInt("mano") % 4) + 1);
+        // Verificamos de nuevo si tras el bonus de ronda alguien ganó la partida
+        if (puntosA >= gameJson.getInt("puntos") || puntosB >= gameJson.getInt("puntos")) {
+            return finalizarPartida(idGame, codigoGame, puntosA, puntosB, gameJson, context);
+        }
+        int nuevaMano = (gameJson.getInt("mano") % 4) + 1;
+        gameJson.put("mano", nuevaMano);
+        gameJson.put("turno", nuevaMano);
         gameJson.put("tablero", new JSONArray("[[],[],[],[]]"));
         gameJson.put("fichasSalidas", new JSONArray());
         gameJson.put("pinfano", new JSONArray("[-1,-1]"));
