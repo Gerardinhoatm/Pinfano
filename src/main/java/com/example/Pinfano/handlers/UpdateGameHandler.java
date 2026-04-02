@@ -210,6 +210,12 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
         new SendJsonHandler().sendUpdateToAll(sendData, context);
 
+        // Después de guardar Dynamo y mandar WS a todos
+        if (siguienteEsBot(gameJson)) {
+            return llamarRecursivamenteAlBot(idGame, context);
+        }
+
+        // Si el siguiente es humano → devolvemos la partida al front
         return response(200, gameJson.toString());
     }
 
@@ -250,6 +256,11 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
 
         JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
         new SendJsonHandler().sendUpdateToAll(sendData, context);
+        // 🔥 Si el siguiente es bot → recursión
+        if (siguienteEsBot(gameJson)) {
+            return llamarRecursivamenteAlBot(idGame, context);
+        }
+
         return response(200, gameJson.toString());
     }
 
@@ -274,7 +285,6 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     }
 
     // --- MÉTODOS DE FINALIZACIÓN (Tus métodos originales corregidos) ---
-
     private APIGatewayProxyResponseEvent finalizarRonda(String idGame, String codigoGame, int turnoActual, JSONObject gameJson, Context context) {
         String ganadorEquipo = (turnoActual == 1 || turnoActual == 3) ? "A" : "B";
         int puntosRonda = calcularPuntosRonda(gameJson, context.getLogger());
@@ -379,5 +389,27 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     private static class JugadaOptima {
         JSONArray ficha; int posicion; int puntuacion;
         JugadaOptima(JSONArray f, int p, int s) { this.ficha = f; this.posicion = p; this.puntuacion = s; }
+    }
+
+    private boolean siguienteEsBot(JSONObject gameJson) {
+        int turno = gameJson.getInt("turno");
+        JSONArray players = gameJson.getJSONArray("listaPlayers");
+        String jugador = players.getString(turno - 1);
+        return jugador.toLowerCase().contains("bot");
+    }
+
+    private APIGatewayProxyResponseEvent llamarRecursivamenteAlBot(
+            String codigoGame,
+            Context context
+    ) {
+        JSONObject fakeBody = new JSONObject();
+        fakeBody.put("codigoGame", codigoGame);
+        fakeBody.put("posicion", -2);
+        fakeBody.put("ficha", new JSONArray().put(-2).put(-2));
+
+        APIGatewayProxyRequestEvent req = new APIGatewayProxyRequestEvent();
+        req.setBody(fakeBody.toString());
+
+        return handleRequest(req, context);
     }
 }
