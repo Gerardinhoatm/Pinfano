@@ -385,7 +385,7 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
     }
 
     private void enviarWS_RondaTerminada(String cod, JSONObject json, Context ctx) {
-        new SendJsonHandler().sendUpdateToAll(new JSONObject().put("type", "gameUpdated").put("codigoGame", cod).put("json", json), ctx);
+        new SendJsonHandler().sendUpdateToAll(new JSONObject().put("type", "gameUpdated").put("codigoGame", cod).put("json", json).put("ganador",""), ctx);
     }
 
     private void enviarWS_PartidaTerminada(String cod, String gan, int pA, int pB, Context ctx) {
