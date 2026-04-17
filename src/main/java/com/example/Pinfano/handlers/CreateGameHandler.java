@@ -88,66 +88,93 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
                 jsonGame.put("estado", numJugadores == 1 ? "A" : "P");
                 jsonGame.put("terminado", false);
                 List<String> pasosIniciales = Arrays.asList("1-3", "VACIO", "VACIO", "VACIO");
-                jsonGame.put("paso", objectMapper.valueToTree(pasosIniciales));
-                jsonGame.put("listaPlayers", objectMapper.valueToTree(jugadores));
+                jsonGame.putPOJO("paso", pasosIniciales);
+                jsonGame.putPOJO("listaPlayers", jugadores);
 
-
-            } else if (letra.equalsIgnoreCase("g")) {
-                context.getLogger().log(">>> [CreateGame] Letra G → generando json a boleo\n");
+            } else if(letra.equalsIgnoreCase("g")){
+                context.getLogger().log(">>> [CreateGame] Letra G → generando partida REAL aleatoria\n");
 
                 jsonGame = objectMapper.createObjectNode();
 
-                // Todas las fichas
-                Map<PairInt, String> todasFichas = todasFichas();
-                List<String> listaFichas = new ArrayList<>(todasFichas.values());
-                Collections.shuffle(listaFichas);
-
-                Map<String, List<String>> manoJugadores = new HashMap<>();
-                int turno = 1;
-                String jugadorCon66 = username;
-
-                for (int i = 0; i < jugadores.size(); i++) {
-                    String j = jugadores.get(i);
-                    if (j.equals("VACIO")) {
-                        manoJugadores.put("jugador" + (i + 1), new ArrayList<>());
-                        continue;
+                // ======================================
+                // 1. GENERAR TODAS LAS FICHAS [0..6]
+                // ======================================
+                List<int[]> fichas = new ArrayList<>();
+                for (int i = 0; i <= 6; i++) {
+                    for (int j = i; j <= 6; j++) {
+                        fichas.add(new int[]{i, j});
                     }
-                    List<String> mano = new ArrayList<>();
-                    for (int k = 0; k < 7 && !listaFichas.isEmpty(); k++) {
-                        String ficha = listaFichas.remove(0);
-                        mano.add(ficha);
-                        if (ficha.equals("seisseis")) { // {6,6}
-                            turno = i + 1;
-                            jugadorCon66 = j;
-                        }
+                }
+                Collections.shuffle(fichas);
+
+                // ======================================
+                // 2. REPARTO ALEATORIO — 4 JUGADORES × 7 FICHAS
+                // ======================================
+                List<int[]> fichasJ1   = new ArrayList<>();
+                List<int[]> fichasBot1 = new ArrayList<>();
+                List<int[]> fichasJ2   = new ArrayList<>();
+                List<int[]> fichasBot2 = new ArrayList<>();
+
+                Map<String, List<int[]>> manos = Map.of(
+                        "fichasJ1",   fichasJ1,
+                        "fichasBot1", fichasBot1,
+                        "fichasJ2",   fichasJ2,
+                        "fichasBot2", fichasBot2
+                );
+
+                int index = 0;
+                for (List<int[]> lista : manos.values()) {
+                    for (int k = 0; k < 7; k++) {
+                        lista.add(fichas.get(index++));
                     }
-                    manoJugadores.put("jugador" + (i + 1), mano);
                 }
 
+                // ==================================================
+                // 3. CALCULAR TURNO: jugador que tenga {6,6}
+                // ==================================================
+                int turno = 0;
+                if (contains66(fichasJ1)) turno = 1;
+                else if (contains66(fichasBot1)) turno = 2;
+                else if (contains66(fichasJ2)) turno = 3;
+                else if (contains66(fichasBot2)) turno = 4;
+
+                // mano = jugador que empieza = turno
+                jsonGame.put("mano", turno);
                 jsonGame.put("turno", turno);
+
+                // ==================================================
+                // 4. GUARDAR LAS FICHAS EN FORMATO DYNAMODB
+                // ==================================================
+                jsonGame.putPOJO("fichasJ1", fichasJ1);
+                jsonGame.putPOJO("fichasBot1", fichasBot1);
+                jsonGame.putPOJO("fichasJ2", fichasJ2);
+                jsonGame.putPOJO("fichasBot2", fichasBot2);
+
+                // ==================================================
+                // 5. CAMPOS OBLIGATORIOS
+                // ==================================================
+                jsonGame.put("terminado", false);
+                jsonGame.put("estado", numJugadores == 1 ? "A" : "P");
                 jsonGame.put("puntos", puntos);
                 jsonGame.put("puntosA", 0);
                 jsonGame.put("puntosB", 0);
-                jsonGame.put("pinFano", "VACIO");
-                jsonGame.put("terminado", false);
-                jsonGame.put("estado", numJugadores == 1 ? "A" : "P");
+                jsonGame.put("codigoGame", codigoGame);
+                jsonGame.put("username", username);
 
-                // Tablero a VACIO
+                // VACIOS
+                jsonGame.put("pinfano", "VACIO");
                 jsonGame.put("tablero", "VACIO");
+                jsonGame.put("fichasSalidas", "VACIO");
+                List<String> pasosIniciales = Arrays.asList("VACIO", "VACIO", "VACIO", "VACIO");
+                jsonGame.putPOJO("paso", pasosIniciales);
 
-                // Mano por jugador (guardamos la cantidad de fichas)
+                // ==================================================
+                // 6. JUGADORES Y LISTA
+                // ==================================================
                 for (int i = 0; i < jugadores.size(); i++) {
-                    String key = "mano" + (i + 1);
-                    jsonGame.put(key, manoJugadores.get("jugador" + (i + 1)).size());
                     jsonGame.put("jugador" + (i + 1), jugadores.get(i));
                 }
-
-                // Fichas salidas y paso
-                jsonGame.put("fichasSalidas", "VACIO");
-                List<String> pasosIniciales = Arrays.asList("3-1", "VACIO", "VACIO", "VACIO");
-                jsonGame.put("paso", objectMapper.valueToTree(pasosIniciales));
-                jsonGame.put("listaPlayers", objectMapper.valueToTree(jugadores));
-
+                jsonGame.put("listaPlayers", jugadores.toString());
             } else {
                 context.getLogger().log(">>> [CreateGame] Letra inválida: " + letra);
                 return createResponse(400, "Letra inválida: " + letra);
@@ -162,8 +189,7 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
             Item item = new Item()
                     .withPrimaryKey("idGame", idGame)
                     .withString("codigoGame", codigoGame)
-                    .withMap("json", objectMapper.convertValue(jsonGame, Map.class))
-                    .withString("estado", jsonGame.get("estado").asText())
+                    .withMap("json", objectMapper.convertValue(jsonGame, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}))                    .withString("estado", jsonGame.get("estado").asText())
                     .withNumber("numJugadores", numJugadores)
                     .withNumber("puntos", puntos)
                     .withBoolean("terminado", false)
@@ -238,46 +264,10 @@ public class CreateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         return sb.toString();
     }
 
-    private Map<PairInt, String> todasFichas() {
-        Map<PairInt, String> mapaFichas = new HashMap<>();
-        String[] nombres = {"cero", "uno", "dos", "tres", "cuatro", "cinco", "seis"};
-
-        for (int i = 0; i <= 6; i++) {
-            for (int j = i; j <= 6; j++) {
-                String nombre = nombres[i] + nombres[j];
-                PairInt clave = new PairInt(i, j);
-                mapaFichas.put(clave, nombre);
-            }
+    private boolean contains66(List<int[]> mano) {
+        for (int[] f : mano) {
+            if (f[0] == 6 && f[1] == 6) return true;
         }
-
-        return mapaFichas;
-    }
-    // Clase interna para reemplazar Pair
-    public static class PairInt {
-        public final int left;
-        public final int right;
-
-        public PairInt(int left, int right) {
-            this.left = left;
-            this.right = right;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof PairInt)) return false;
-            PairInt pair = (PairInt) o;
-            return left == pair.left && right == pair.right;
-        }
-
-        @Override
-        public int hashCode() {
-            return 31 * left + right;
-        }
-
-        @Override
-        public String toString() {
-            return "(" + left + "," + right + ")";
-        }
+        return false;
     }
 }

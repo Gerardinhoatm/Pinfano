@@ -43,7 +43,7 @@ public class ReadTilesHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
                     .build();
 
         } catch (Exception e) {
-            e.printStackTrace();
+            context.getLogger().log(">>> [ReadTilesHandler] ERROR leyendo JSON: " + e.getMessage() + "\n");
             return APIGatewayV2HTTPResponse.builder()
                     .withStatusCode(500)
                     .withBody("Error leyendo JSON: " + e.getMessage())
