@@ -19,8 +19,6 @@ import java.util.Random;
 public class ReadTilesHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
 
     private static final String BUCKET = "pinfano-data";
-
-    // 🔥 Lista de archivos disponibles
     private static final List<String> KEYS = List.of(
             "fichas.json",
             "fichas1.json"
