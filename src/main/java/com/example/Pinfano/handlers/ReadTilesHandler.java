@@ -21,8 +21,7 @@ public class ReadTilesHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
     private static final String BUCKET = "pinfano-data";
     private static final List<String> KEYS = List.of(
             "fichas.json",
-            "fichas1.json"
-            // Puedes añadir más: "fichas2.json", "demo3.json"...
+            "fichasuno.json"
     );
 
     private final S3Client s3 = S3Client.builder()
