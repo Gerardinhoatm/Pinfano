@@ -17,7 +17,7 @@ import java.util.Map;
 public class ReadTilesHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
 
     private static final String BUCKET = "pinfano-data";
-    private static final String KEY = "fichasuno.json";
+    private static final String KEY = "fichas.json";
 
     private final S3Client s3 = S3Client.builder()
             .region(Region.EU_CENTRAL_1)
