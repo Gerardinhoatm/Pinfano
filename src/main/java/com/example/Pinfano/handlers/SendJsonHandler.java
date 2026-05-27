@@ -60,6 +60,7 @@ public class SendJsonHandler implements RequestHandler<APIGatewayV2WebSocketEven
             if (data.has("puntosA")) msg.put("puntosA", data.get("puntosA"));
             if (data.has("puntosB")) msg.put("puntosB", data.get("puntosB"));
             if (data.has("mano")) msg.put("mano", data.get("mano"));
+            if (data.has("pausaFinal")) msg.put("pausaFinal", data.get("pausaFinal"));
 
             String domain = System.getenv("WS_DOMAIN");
             String stage = System.getenv("WS_STAGE");

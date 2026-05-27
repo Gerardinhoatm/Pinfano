@@ -200,20 +200,37 @@ public class UpdateGameHandler implements RequestHandler<APIGatewayProxyRequestE
         item.withJSON("json", gameJson.toString());
         table.putItem(item);
 
-        // Checks de fin
-        if (puntosA >= gameJson.getInt("puntos") || puntosB >= gameJson.getInt("puntos")) {
+        // Checks de fin: si la jugada cierra ronda o partida, igualmente notificamos
+        // primero el gameUpdated del último movimiento con la bandera "pausaFinal" para
+        // que los clientes lo animen y revelen las fichas restantes antes de procesar el
+        // mensaje de fin que va a continuación.
+        boolean esFinPartida = puntosA >= gameJson.getInt("puntos") || puntosB >= gameJson.getInt("puntos");
+        boolean esFinRonda = fichasJugador.isEmpty();
+        boolean pausaFinal = esFinPartida || esFinRonda;
+
+        // Clonamos el snapshot para que finalizarRonda no mute el JSON ya en vuelo.
+        JSONObject snapshot = new JSONObject(gameJson.toString());
+        JSONObject sendData = new JSONObject()
+                .put("type", "gameUpdated")
+                .put("codigoGame", codigoGame)
+                .put("json", snapshot)
+                .put("turno", nuevoTurno)
+                .put("pausaFinal", pausaFinal);
+        new SendJsonHandler().sendUpdateToAll(sendData, context);
+
+        if (esFinPartida) {
             return finalizarPartida(idGame, codigoGame, puntosA, puntosB, gameJson, context);
         }
-        if (fichasJugador.isEmpty()) {
+        if (esFinRonda) {
             return finalizarRonda(idGame, codigoGame, turnoActual, gameJson, context);
         }
 
-        JSONObject sendData = new JSONObject().put("type", "gameUpdated").put("codigoGame", codigoGame).put("json", gameJson).put("turno", nuevoTurno);
-        new SendJsonHandler().sendUpdateToAll(sendData, context);
-
         if (siguienteEsBot(gameJson)) {
             logger.log("El siguiente es BOT, ejecutando turno automáticamente...");
-            try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+            // Damos tiempo a los clientes a terminar la animación de la ficha previa
+            // (~500 ms) y a la transición entre Activities antes de emitir el movimiento
+            // del bot. Si el cliente tardara más, su cola FIFO lo encolaría igualmente.
+            try { Thread.sleep(2500); } catch (InterruptedException ignored) {}
             return ejecutarTurnoBot(idGame, codigoGame, gameJson, nuevoTurno, context);
         } else {
             logger.log("El siguiente es Humano, devolviendo control al front.");
