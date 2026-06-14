@@ -81,11 +81,18 @@ public class ContinueGameHandler implements RequestHandler<APIGatewayProxyReques
             }
 
             // --- Sacar turno desde json interno ---
-            Map<String, Object> jsonData = game.getMap("json");
+            String jsonString = game.getString("json");
+
             int turno = 0;
-            if (jsonData != null && jsonData.get("turno") != null) {
-                turno = ((Number) jsonData.get("turno")).intValue();
+
+            if (jsonString != null && !jsonString.isEmpty()) {
+                JsonNode jsonData = objectMapper.readTree(jsonString);
+
+                if (jsonData.has("turno")) {
+                    turno = jsonData.get("turno").asInt();
+                }
             }
+
             context.getLogger().log("[CONTINUE] Turno actual de la partida: " + turno + "\n");
 
             // --- Convertir playerIndex a 1-based para tu lógica de juego ---
