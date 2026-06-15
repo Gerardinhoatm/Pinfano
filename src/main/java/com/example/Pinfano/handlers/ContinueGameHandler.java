@@ -81,12 +81,19 @@ public class ContinueGameHandler implements RequestHandler<APIGatewayProxyReques
             }
 
             // --- Sacar turno desde json interno ---
-            String jsonString = game.getString("json");
+            Object jsonObj = game.get("json");
 
             int turno = 0;
 
-            if (jsonString != null && !jsonString.isEmpty()) {
-                JsonNode jsonData = objectMapper.readTree(jsonString);
+            if (jsonObj != null) {
+
+                JsonNode jsonData;
+
+                if (jsonObj instanceof String) {
+                    jsonData = objectMapper.readTree((String) jsonObj);
+                } else {
+                    jsonData = objectMapper.valueToTree(jsonObj);
+                }
 
                 if (jsonData.has("turno")) {
                     turno = jsonData.get("turno").asInt();
